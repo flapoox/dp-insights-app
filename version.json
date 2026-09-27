@@ -1,10 +1,10 @@
 {
-  "version": "2.2",
+  "version": "2.3",
   "date": "2026-09-27",
   "notes": [
-    "New YouTube tab: both channels together or one at a time",
-    "Views, watch time, subscribers, Shorts vs long videos",
-    "Where views come from + top videos with thumbnails",
-    "YouTube suggestions: going right / wrong / do this next"
+    "New Scripts tab: 12 ready scripts, each marked Face shoot, AI clone, Animation or Faceless",
+    "Shoot plan for your photographer and work list for your editors",
+    "Teleprompter with your camera behind the text, plus record (beta)",
+    "Copy any script for your editor in one tap"
   ]
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DP Insights</title>
-<meta name="app-version" content="2.2">
+<meta name="app-version" content="2.3">
 <meta name="theme-color" content="#6b2d8f">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -207,6 +207,34 @@ dialog#actDlg::backdrop{background:rgba(10,10,20,.45)}
 .ytch .sub{margin:0}
 .ytcards .pc-img{aspect-ratio:16/9;overflow:hidden;background:var(--surface-2)}
 .ytcards .pc-img .th{width:100%;height:100%;object-fit:cover}
+/* ---------- Scripts ---------- */
+.splan{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+.scards{display:grid;gap:14px;margin-top:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr))}
+.scard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.sc-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sc-no{font-family:var(--mono);font-weight:700;color:var(--ink-2)}
+.sc-type{color:#fff;font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px}
+.sc-st{margin-left:auto;border:1px solid var(--line);border-radius:8px;padding:4px 6px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
+.scard h3{margin:4px 0 0;font-size:16px;line-height:1.35}
+.sc-owner{margin:0;color:var(--muted);font-size:12.5px}
+.scard blockquote{margin:4px 0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;font-weight:600}
+.scard details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13.5px;padding:4px 0}
+.sc-body p{margin:6px 0}
+.scard dl{margin:10px 0 0;font-size:13px}.scard dt{font-weight:700;margin-top:8px}.scard dd{margin:2px 0 0;color:var(--ink-2)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:100;max-width:90vw}
+.tp{position:fixed;inset:0;z-index:90;background:#000;color:#fff;overflow:hidden}
+.tp-v{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.tp-msg{position:absolute;left:16px;right:16px;top:45%;text-align:center;color:#ddd;font-size:15px}
+.tp-strip{position:absolute;left:0;right:0;top:0;overflow:hidden;background:rgba(0,0,0,.45);padding:14px 18px 0;cursor:pointer;-webkit-mask-image:linear-gradient(#000 80%,transparent);mask-image:linear-gradient(#000 80%,transparent)}
+.tp-text{font-weight:700;line-height:1.35;text-shadow:0 1px 3px rgba(0,0,0,.8);will-change:transform}
+.tp-text p{margin:0 0 .5em}.tp-end{opacity:.6;text-align:center}
+.tp-count{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:96px;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+.tp-bar{position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:12px 10px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.tp-bar button{border:0;border-radius:999px;background:rgba(255,255,255,.18);color:#fff;font:inherit;font-weight:700;padding:10px 14px;min-width:44px;backdrop-filter:blur(4px)}
+.tp-bar .tp-main{background:#fff;color:#111}
+.tp-bar .tp-rec.on{background:#e53935}
+.tp-bar button:disabled{opacity:.4}
+.tp-save{position:absolute;right:14px;bottom:84px;background:#fff;color:#111;font-weight:700;padding:10px 14px;border-radius:999px;text-decoration:none}
 ol.steps{margin:8px 0 0;padding-left:20px;line-height:1.8}
 
 .mark.logo{background:#fff;padding:3px;object-fit:contain;box-shadow:inset 0 0 0 1px var(--line)}
@@ -269,6 +297,7 @@ body{padding-top:env(safe-area-inset-top)}
       <button class="tab" role="tab" data-tab="facebook" aria-selected="false" id="t-facebook">Facebook</button>
       <button class="tab" role="tab" data-tab="ads" aria-selected="false" id="t-ads">Meta Ads</button>
       <button class="tab" role="tab" data-tab="youtube" aria-selected="false" id="t-youtube">YouTube</button>
+      <button class="tab" role="tab" data-tab="scripts" aria-selected="false" id="t-scripts">Scripts</button>
       <button class="tab" role="tab" data-tab="posts" aria-selected="false" id="t-posts">Posts</button>
       <button class="tab" role="tab" data-tab="audience" aria-selected="false" id="t-audience">Audience</button>
     </div>

@@ -676,6 +676,127 @@ function afterYoutube(){
   barChart($('#ytWatch'),rows,r=>(r.minutes||0)/60,col,v=>compact(v)+' h',{name:'Watch hours',label:'Watch time'});
 }
 
+/* ---------- Scripts + teleprompter ---------- */
+const STYPE={FACE:{n:'Face shoot',ic:'📸',c:'var(--ig)'},CLONE:{n:'AI clone',ic:'🤖',c:'var(--accent)'},ANIMATION:{n:'Animation',ic:'🎞️',c:'var(--yt)'},FACELESS:{n:'Faceless',ic:'🎧',c:'var(--ads)'}};
+const SSTAT=['To do','Shot','Edited','Posted'];
+const SC=(DATA.scripts||[]).slice().sort((a,b)=>(+a.priority||99)-(+b.priority||99));
+if(!state.sf) state.sf='ALL'; if(!state.ss) state.ss='open';
+const sdate=s=>{const d=toDate(String(s||'').slice(0,10));return isNaN(d)?'':dlabel(d)};
+function scriptText(x){const T=STYPE[x.type]||{n:x.type};
+  return ['#'+x.priority+' '+x.title,'Type: '+T.n+' | Owner: '+x.owner+' | Post on: '+sdate(x.post_on),'','HOOK: '+x.hook,'','SCRIPT:',x.script,'','ON-SCREEN TEXT: '+x.on_screen,'','EDITOR NOTES: '+x.visuals,'','CAPTION: '+x.caption,'','AI label on Instagram: '+x.ai_label].join('\n')}
+function scriptsView(){
+  if(!SC.length) return `<section class="panel">${empty('No scripts yet. Ask Claude for this month\'s scripts.')}</section>`;
+  const open=SC.filter(x=>x.status!=='Posted');
+  const cnt=t=>open.filter(x=>x.type===t).length;
+  const list=SC.filter(x=>(state.sf==='ALL'||x.type===state.sf)&&(state.ss==='all'||(state.ss==='open'?x.status!=='Posted':x.status==='Posted')));
+  const nFace=cnt('FACE');
+  const plan=[
+    ['FACE',`${nFace} to shoot`,nFace?`One session with your photographer, about ${nFace*10+30} min. Same spot, change outfit between scripts. Use the teleprompter below.`:'Nothing left to shoot.'],
+    ['CLONE',`${cnt('CLONE')} for the editor`,'Editor pastes the script into HeyGen with your avatar and voice. Turn on the AI label when posting.'],
+    ['ANIMATION',`${cnt('ANIMATION')} for the editor`,'Fully AI-animated film with your cloned voice, like your Ganesha film. Needs 1 to 2 days, so start early.'],
+    ['FACELESS',`${cnt('FACELESS')} for the editor`,'Text, b-roll or screen recording with your cloned voice. The editor can batch these in one sitting.']];
+  return `
+  <div class="grid splan">${plan.map(p=>`<div class="kpi"><div class="lbl"><span class="sw" style="background:${STYPE[p[0]].c}"></span>${STYPE[p[0]].ic} ${STYPE[p[0]].n}</div><div class="val" style="font-size:22px">${p[1]}</div><p class="sub" style="margin:6px 0 0">${p[2]}</p></div>`).join('')}</div>
+  <div class="ybar" style="margin-top:16px">
+    <div class="seg" id="sfSeg">${[['ALL','All'],...Object.keys(STYPE).map(k=>[k,STYPE[k].ic+' '+STYPE[k].n])].map(o=>`<button data-v="${o[0]}" aria-pressed="${state.sf===o[0]}">${o[1]}</button>`).join('')}</div>
+    <div class="seg" id="ssSeg">${[['open','To make'],['posted','Posted'],['all','All']].map(o=>`<button data-v="${o[0]}" aria-pressed="${state.ss===o[0]}">${o[1]}</button>`).join('')}</div>
+  </div>
+  <div class="scards">${list.map(x=>{const T=STYPE[x.type]||{n:x.type,ic:'',c:'var(--muted)'};
+    return `<article class="scard" data-id="${esc(x.id)}">
+      <div class="sc-top"><span class="sc-no">#${esc(x.priority)}</span><span class="sc-type" style="background:${T.c}">${T.ic} ${esc(T.n)}</span><span class="sub" style="margin:0">Post on <b>${esc(sdate(x.post_on))}</b></span>
+        <select class="sc-st" aria-label="Status">${SSTAT.map(s=>`<option ${s===x.status?'selected':''}>${s}</option>`).join('')}</select></div>
+      <h3>${esc(x.title)}</h3>
+      <p class="sc-owner">${esc(x.owner)} · ${esc(x.pillar||'')}</p>
+      <blockquote>${esc(x.hook)}</blockquote>
+      <details><summary>Full script and notes</summary>
+        <div class="sc-body">${String(x.script||'').split('\n').map(l=>`<p>${esc(l)}</p>`).join('')}</div>
+        <dl><dt>On-screen text</dt><dd>${esc(x.on_screen)}</dd><dt>Editor notes</dt><dd>${esc(x.visuals)}</dd><dt>Caption</dt><dd>${esc(x.caption)}</dd><dt>AI label on Instagram</dt><dd>${esc(x.ai_label)}</dd></dl>
+      </details>
+      <div class="ins-acts"><button type="button" class="abtn a-good sm sc-tp">▶ Teleprompter</button><button type="button" class="abtn a-ghost sm sc-copy">📋 Copy for editor</button></div>
+    </article>`}).join('')||empty('No scripts match this filter.')}</div>`;
+}
+function copyText(t){
+  const fall=()=>{const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}a.remove();return ok};
+  if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(()=>true,()=>fall());
+  return Promise.resolve(fall());
+}
+function sendScriptStatus(id,status){
+  if(window.DP_ACTION) return window.DP_ACTION({scriptStatus:{id,status}});
+  return new Promise(res=>{try{google.script.run.withSuccessHandler(res).withFailureHandler(e=>res({error:'net',message:String(e&&e.message||e)})).setScriptStatus(id,status)}catch(e){res({error:'net',message:'Not available here.'})}});
+}
+function afterScripts(){
+  const seg=(id,key)=>{const el=$(id);if(el)el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state[key]=b.dataset.v;save();render()})};
+  seg('#sfSeg','sf');seg('#ssSeg','ss');
+  document.querySelectorAll('.scard').forEach(card=>{
+    const x=SC.find(s=>s.id===card.dataset.id);if(!x)return;
+    card.querySelector('.sc-tp').addEventListener('click',()=>openTeleprompter(x));
+    const cb=card.querySelector('.sc-copy');
+    cb.addEventListener('click',()=>copyText(scriptText(x)).then(ok=>{cb.textContent=ok?'✓ Copied':'Copy failed';setTimeout(()=>cb.textContent='📋 Copy for editor',1800)}));
+    const sel=card.querySelector('.sc-st');
+    sel.addEventListener('change',()=>{const prev=x.status,v=sel.value;sel.disabled=true;
+      sendScriptStatus(x.id,v).then(r=>{sel.disabled=false;if(r&&r.ok){x.status=v}else{sel.value=prev;alertBox((r&&r.message)||'Could not save.')}})});
+  });
+}
+function alertBox(msg){const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),3500)}
+
+/* teleprompter: front camera behind, script in a see-through strip at the top */
+let TP=null;
+function openTeleprompter(x){
+  closeTeleprompter();
+  const lines=String(x.script||'').split('\n').filter(l=>l.trim()&&!/^\[/.test(l.trim()));
+  const LS=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+  let tp={speed:+(LS('tpSpeed')||38),size:+(LS('tpSize')||30),h:+(LS('tpH')||34),off:0,run:false,last:0,stream:null,rec:null,chunks:[]};
+  const el=document.createElement('div');el.className='tp';el.innerHTML=`
+    <video class="tp-v" autoplay playsinline muted></video>
+    <p class="tp-msg" hidden></p>
+    <div class="tp-strip"><div class="tp-text">${lines.map(l=>`<p>${esc(l)}</p>`).join('')}<p class="tp-end">— end —</p></div></div>
+    <div class="tp-count" hidden></div>
+    <div class="tp-bar">
+      <button data-a="close" aria-label="Close">✕</button>
+      <button data-a="slow" aria-label="Slower">🐢</button><button data-a="play" class="tp-main">▶ Start</button><button data-a="fast" aria-label="Faster">🐇</button>
+      <button data-a="small" aria-label="Smaller text">A−</button><button data-a="big" aria-label="Bigger text">A+</button>
+      <button data-a="height" aria-label="Strip height">⇕</button>
+      <button data-a="rec" class="tp-rec">⏺ Record</button>
+    </div>
+    <a class="tp-save" hidden>⬇ Save video</a>`;
+  document.body.appendChild(el);document.body.style.overflow='hidden';
+  const strip=el.querySelector('.tp-strip'),text=el.querySelector('.tp-text'),v=el.querySelector('.tp-v'),msg=el.querySelector('.tp-msg'),cnt=el.querySelector('.tp-count'),mainB=el.querySelector('.tp-main'),recB=el.querySelector('.tp-rec'),saveA=el.querySelector('.tp-save');
+  const apply=()=>{strip.style.height=tp.h+'vh';text.style.fontSize=tp.size+'px';text.style.transform=`translateY(${-tp.off}px)`;try{localStorage.setItem('tpSpeed',tp.speed);localStorage.setItem('tpSize',tp.size);localStorage.setItem('tpH',tp.h)}catch(e){}};
+  const loop=t=>{if(!tp.run)return;const dt=tp.last?(t-tp.last)/1000:0;tp.last=t;tp.off+=tp.speed*dt;const max=text.scrollHeight-strip.clientHeight*0.4;if(tp.off>=max){tp.off=max;stop()}apply();tp.raf=requestAnimationFrame(loop)};
+  const start=()=>{let n=3;cnt.hidden=false;cnt.textContent=n;mainB.textContent='⏸ Pause';tp.cd=setInterval(()=>{n--;if(n<=0){clearInterval(tp.cd);cnt.hidden=true;tp.run=true;tp.last=0;tp.raf=requestAnimationFrame(loop)}else cnt.textContent=n},800)};
+  const stop=()=>{tp.run=false;clearInterval(tp.cd);cnt.hidden=true;cancelAnimationFrame(tp.raf);mainB.textContent=tp.off>0?'▶ Resume':'▶ Start'};
+  const toggle=()=>tp.run||!cnt.hidden?stop():start();
+  strip.addEventListener('click',toggle);
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1080},height:{ideal:1920}},audio:true})
+      .then(s=>{tp.stream=s;v.srcObject=s})
+      .catch(()=>{msg.hidden=false;msg.textContent='Camera not available here. It works in the phone app (allow camera when asked). You can still read the script.';recB.disabled=true});
+  } else {msg.hidden=false;msg.textContent='Camera not available here. Use the phone app for the camera view.';recB.disabled=true}
+  el.querySelector('.tp-bar').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a;
+    if(a==='close')return closeTeleprompter();
+    if(a==='play')return toggle();
+    if(a==='slow')tp.speed=Math.max(10,tp.speed-8);
+    if(a==='fast')tp.speed=Math.min(160,tp.speed+8);
+    if(a==='small')tp.size=Math.max(18,tp.size-3);
+    if(a==='big')tp.size=Math.min(60,tp.size+3);
+    if(a==='height')tp.h=tp.h>=50?25:tp.h+12;
+    if(a==='rec'){
+      if(tp.rec&&tp.rec.state==='recording'){tp.rec.stop();return}
+      if(!tp.stream||!window.MediaRecorder){alertBox('Recording is not supported on this phone. Use your camera app, and keep this screen as the prompter.');return}
+      const mt=['video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m))||'';
+      tp.chunks=[];try{tp.rec=new MediaRecorder(tp.stream,mt?{mimeType:mt}:undefined)}catch(err){alertBox('Recording is not supported on this phone.');return}
+      tp.rec.ondataavailable=ev=>{if(ev.data&&ev.data.size)tp.chunks.push(ev.data)};
+      tp.rec.onstop=()=>{const blob=new Blob(tp.chunks,{type:tp.rec.mimeType||'video/webm'});const ext=/mp4/.test(blob.type)?'mp4':'webm';
+        if(saveA.href)URL.revokeObjectURL(saveA.href);saveA.href=URL.createObjectURL(blob);saveA.download=(x.id+'-take-'+Date.now()).replace(/[^\w-]/g,'')+'.'+ext;saveA.hidden=false;recB.textContent='⏺ Record';recB.classList.remove('on');stop()};
+      tp.rec.start(1000);recB.textContent='⏹ Stop';recB.classList.add('on');saveA.hidden=true;tp.off=0;apply();start();
+    }
+    apply();});
+  apply();TP={el,tp};
+}
+function closeTeleprompter(){if(!TP)return;const {el,tp}=TP;tp.run=false;clearInterval(tp.cd);cancelAnimationFrame(tp.raf);
+  try{if(tp.rec&&tp.rec.state==='recording')tp.rec.stop()}catch(e){}
+  if(tp.stream)tp.stream.getTracks().forEach(t=>t.stop());el.remove();document.body.style.overflow='';TP=null}
+
 /* ---------- header + render ---------- */
 (function header(){
   const L=DATA.lastSync, n=dates.length;
@@ -686,7 +807,7 @@ function afterYoutube(){
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
 const views={overview:[overview,afterOverview],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
-  ads:[ads,afterAds],youtube:[youtube,afterYoutube],posts:[postsView,bindSort],audience:[audience,afterAudience]};
+  ads:[ads,afterAds],youtube:[youtube,afterYoutube],scripts:[scriptsView,afterScripts],posts:[postsView,bindSort],audience:[audience,afterAudience]};
 if(!views[state.tab]) state.tab='overview';
 function render(){
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===state.tab));
