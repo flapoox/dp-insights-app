@@ -156,6 +156,47 @@ code{font:12px var(--mono);background:var(--surface-2);padding:1px 5px;border-ra
 .pc-stats b{color:var(--ink);font-weight:600}
 .pc-date{margin:0;font-size:11.5px;color:var(--muted)}
 
+/* ---- Meta Ads insights + actions ---- */
+.ins3{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.ins h2{margin-bottom:10px}
+.ins-good{border-top:3px solid var(--good)} .ins-bad{border-top:3px solid var(--bad)} .ins-next{border-top:3px solid var(--accent)}
+.ins-item{padding:10px 0;border-top:1px solid var(--line)} .ins-item:first-of-type{border-top:0;padding-top:0}
+.ins-item b{font-size:14px} .ins-item p{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.ins-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.abtn{font:600 12.5px var(--body);border-radius:8px;padding:7px 12px;cursor:pointer;border:1px solid transparent;text-decoration:none;display:inline-flex;align-items:center;gap:4px;line-height:1.2}
+.abtn.sm{padding:4px 9px;font-size:12px}
+.a-good{background:var(--accent);color:var(--accent-ink)} .a-bad{background:var(--bad);color:#fff}
+.a-ghost{background:var(--surface);color:var(--ink);border-color:var(--line)} .a-ghost:hover{border-color:var(--axis)}
+.abtn:disabled{opacity:.6;cursor:default}
+.bud{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.note{font-size:13px;color:var(--ink-2);background:var(--accent-soft);border-radius:10px;padding:10px 12px;margin:12px 0 0}
+.adcards .pc-img{aspect-ratio:1/1;overflow:hidden;background:var(--surface-2)}
+.adcard .ad-name{font-size:13.5px}
+.ad-why{margin:0;font-size:12px;color:var(--ink-2);font-style:italic}
+.tag{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;color:#fff}
+.t-win{background:var(--good)} .t-bad{background:var(--bad)} .t-warn{background:var(--warn)} .t-watch{background:#6b6a73} .t-ok{background:var(--fb)}
+.pc-link{color:inherit;text-decoration:none;display:flex;flex-direction:column}
+.pc-foot{padding:0 12px 12px;margin-top:auto}
+.alog{list-style:none;margin:0;padding:0;font-size:13px} .alog li{padding:8px 0;border-top:1px solid var(--line)} .alog li:first-child{border-top:0}
+dialog#actDlg{border:0;border-radius:16px;padding:0;background:var(--surface);color:var(--ink);width:min(92vw,440px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog#actDlg::backdrop{background:rgba(10,10,20,.45)}
+.dlg{padding:20px 20px 16px;display:flex;flex-direction:column;gap:8px}
+.dlg h2{font:700 19px var(--display);margin:0 0 4px} .dlg p{margin:0}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.fld input,.fld select{font:500 15px var(--body);padding:9px 10px;border:1px solid var(--axis);border-radius:9px;background:var(--bg);color:var(--ink)}
+.fld[hidden]{display:none}
+.fld2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dlg-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.dlg .err{color:var(--bad);font-size:13px} .dlg .ok{color:var(--good);font-size:13.5px;font-weight:600}
+.boost-img{width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:6px}
+@media (max-width:640px){
+  .kpis.k4{grid-template-columns:1fr 1fr;gap:10px}
+  .kpis.k4 .kpi{padding:12px}
+  .kpis.k4 .val{font-size:21px}
+  .kpis.k4 .delta{font-size:11.5px}
+  .ins-acts .abtn{padding:8px 12px}
+}
+
 .mark.logo{background:#fff;padding:3px;object-fit:contain;box-shadow:inset 0 0 0 1px var(--line)}
 .appbar{display:flex;gap:8px;align-items:center}
 .iconbtn{font:500 12.5px var(--body);color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
@@ -223,7 +264,7 @@ body{padding-top:env(safe-area-inset-top)}
   <p class="footer">Periods compare against the previous period of equal length. Ad spend in ₹ as reported by Meta. "—" means Meta has not returned that metric for this account.</p>
 </div>
 
-
+<dialog id="actDlg" aria-label="Confirm change"></dialog>
 <div id="gate" hidden>
   <form class="gate-card" id="gateForm" autocomplete="off">
     <img src="icon-192.png" alt="Digital Poonam">

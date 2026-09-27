@@ -46,6 +46,12 @@
     return fetch(API, { method: 'POST', body: JSON.stringify({ pin: pin }), redirect: 'follow' })
       .then(function (r) { return r.json(); });
   }
+  // Changes (pause, budget, boost) go to the same script; it checks the viewing PIN and the Action PIN.
+  window.DP_ACTION = function (payload) {
+    return fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ pin: get(K_PIN) }, payload)), redirect: 'follow' })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { error: 'net', message: 'No internet connection. Nothing was changed.' }; });
+  };
   function lastSync(d) { return d && d.lastSync && d.lastSync.time || ''; }
 
   function load(pin, fromGate) {

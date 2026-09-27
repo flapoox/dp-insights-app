@@ -1,4 +1,5 @@
 /* Dashboard renderer (same as the Google dashboard). Expects window.DP_DATA. */
+
 const DATA = window.DP_DATA;
 (function(){
 const $ = (s,el=document)=>el.querySelector(s);
@@ -227,7 +228,7 @@ function afterPlatform(which){
   bindSort();
 }
 
-function ads(){
+function oldAds(){
   const c=slice(state.range),p=slice(state.range,1),w=buckets();
   const s=S(c,'ad_spend'),i=S(c,'ad_impressions'),cl=S(c,'ad_link_clicks'),l=S(c,'ad_leads');
   const ps=S(p,'ad_spend'),pi=S(p,'ad_impressions'),pcl=S(p,'ad_link_clicks'),pl=S(p,'ad_leads');
@@ -262,13 +263,202 @@ function ads(){
     </tbody></table></div>
     <p class="sub" style="margin:10px 0 0">Health flags: CPL more than 15% above the account average, or spend with no link clicks.</p>`:empty('No campaigns ran in this period.')}</section>`;
 }
+/* ---------- Meta Ads: scorecard, suggestions, campaigns, ad previews, actions ---------- */
+const SET=DATA.settings||{};
+const META={};(DATA.adsMeta||[]).forEach(m=>META[m.ad_id]=m);
+const numv=v=>v==null||v===''?0:Number(v)||0;
+function adRows(win){return (DATA.adStats||[]).filter(r=>String(r.window)===String(win)).map(r=>{
+  const m=META[r.ad_id]||{};return Object.assign({},r,{spend:numv(r.spend),impressions:numv(r.impressions),reach:numv(r.reach),frequency:numv(r.frequency),
+  link_clicks:numv(r.link_clicks),results:numv(r.results),value:numv(r.value),purchases:numv(r.purchases),leads:numv(r.leads),m});});}
+function roll(rows){const t={spend:0,impressions:0,link_clicks:0,results:0,value:0,purchases:0,leads:0,freqW:0,byType:{}};
+  rows.forEach(r=>{t.spend+=r.spend;t.impressions+=r.impressions;t.link_clicks+=r.link_clicks;t.value+=r.value;t.purchases+=r.purchases;t.leads+=r.leads;t.freqW+=r.frequency*r.impressions;
+    const b=t.byType[r.result_type]=t.byType[r.result_type]||{spend:0,n:0};b.spend+=r.spend;b.n+=r.results;});
+  const main=Object.entries(t.byType).sort((a,b)=>b[1].spend-a[1].spend)[0];
+  t.type=main?main[0]:'Results';t.results=main?main[1].n:0;t.typeSpend=main?main[1].spend:0;
+  t.cpr=t.results?t.typeSpend/t.results:null;t.ctr=t.impressions?t.link_clicks/t.impressions*100:null;
+  t.cpm=t.impressions?t.spend/t.impressions*1000:null;t.cpc=t.link_clicks?t.spend/t.link_clicks:null;t.freq=t.impressions?t.freqW/t.impressions:null;
+  t.roas=t.value&&t.spend?t.value/t.spend:null;t.estRoas=!t.roas&&SET.leadValue&&t.leads&&t.spend?t.leads*SET.leadValue/t.spend:null;
+  return t;}
+function groupBy(rows,key){const g={};rows.forEach(r=>(g[r[key]]=g[r[key]]||[]).push(r));return g;}
+const budgetOf=m=>{const a=m.adset_budget,c=m.campaign_budget;
+  if(c!==''&&c!=null&&!String(c).startsWith('L')) return {id:m.campaign_id,level:'campaign',v:Number(c)};
+  if(a!==''&&a!=null&&!String(a).startsWith('L')) return {id:m.adset_id,level:'ad set',v:Number(a)};return null;};
+const isOn=s=>String(s||'').toUpperCase()==='ACTIVE';
+const typeShort=t=>({'Leads':'lead','Purchases':'purchase','Chats started':'chat','Landing page views':'page view','Link clicks':'click','Engagements':'engagement','Video views':'view','People reached':'person reached','App installs':'install'}[t]||'result');
+const typePlural=t=>({'People reached':'people reached'}[t]||typeShort(t)+'s');
+function btn(label,a,cls){return `<button type="button" class="abtn ${cls||''}" data-act="${esc(JSON.stringify(a))}">${label}</button>`;}
+
+function adsModel(){
+  const w=String(state.range),cur=adRows(w),prev=adRows('p'+w);
+  const T=roll(cur),P=roll(prev);
+  const camps=Object.entries(groupBy(cur,'campaign_id')).map(([id,rs])=>{const t=roll(rs),m=rs[0].m||{};
+    const pt=roll(prev.filter(r=>r.campaign_id===id));
+    return Object.assign(t,{id,name:m.campaign_name||'Campaign '+id,status:m.campaign_status,objective:m.objective,budget:budgetOf(m),prev:pt,ads:rs.length});}).sort((a,b)=>b.spend-a.spend);
+  const ads=cur.map(r=>{const t=roll([r]);const p=prev.find(x=>x.ad_id===r.ad_id);const pt=p?roll([p]):null;
+    return Object.assign(t,{id:r.ad_id,m:r.m,name:r.m.ad_name||'Ad '+r.ad_id,status:r.m.status,eff:r.m.effective_status,prevCtr:pt?pt.ctr:null});}).sort((a,b)=>b.spend-a.spend);
+  // ads that are live but had no spend in this window
+  Object.values(META).forEach(m=>{if(isOn(m.effective_status)&&!ads.some(a=>a.id===m.ad_id)) ads.push(Object.assign(roll([]),{id:m.ad_id,m,name:m.ad_name,status:m.status,eff:m.effective_status,prevCtr:null,idle:true}));});
+  const avg=T.cpr;
+  const cnt={};camps.forEach(c=>cnt[c.type]=(cnt[c.type]||0)+1);const acnt={};ads.forEach(a=>{if(!a.idle)acnt[a.type]=(acnt[a.type]||0)+1});
+  const avgC=t=>cnt[t]>1&&T.byType[t]&&T.byType[t].n?T.byType[t].spend/T.byType[t].n:null;   // compare campaigns only within the same result type
+  const avgA=t=>acnt[t]>1&&T.byType[t]&&T.byType[t].n?T.byType[t].spend/T.byType[t].n:null;
+  ads.forEach(a=>{const avg=avgA(a.type);
+    const enough=a.spend>=Math.max(200,(avg||300)*1.5);
+    a.tag=a.idle?['Idle','t-watch','Live but no spend in this period']
+      :a.results>=3&&avg&&a.cpr<=avg*0.8?['Winner','t-win',`${Math.round((1-a.cpr/avg)*100)}% cheaper per ${typeShort(a.type)} than average`]
+      :enough&&!a.results&&a.type!=='People reached'?['Pause','t-bad',`Spent ${inr(a.spend)} with no ${typePlural(a.type)}`]
+      :enough&&avg&&a.cpr>=avg*1.6?['Pause','t-bad',`${Math.round((a.cpr/avg-1)*100)}% costlier than average`]
+      :a.impressions>1000&&a.ctr!=null&&a.ctr<0.6?['Fix','t-warn','Very few people click: try a new hook or visual']
+      :a.freq>3.5?['Watch','t-watch','Same people seeing it too often']
+      :a.spend<100?['New','t-watch','Not enough data yet']:['OK','t-ok','Performing close to average'];});
+  return {T,P,camps,ads,avg,avgC};
+}
+
+function adInsights(M){
+  const {T,P,camps,ads,avgC}=M, good=[],bad=[],next=[], u=typeShort(T.type), R=state.range;
+  if(!T.spend) return {good,bad,next:[{t:'No ad spend in this period',x:'Nothing to analyse for the last '+R+' days. Pick a longer range or start a campaign.'}]};
+  if(T.cpr&&P.cpr){const ch=(T.cpr-P.cpr)/P.cpr*100;
+    if(ch>=20) bad.push({t:`Cost per ${u} up ${ch.toFixed(0)}%`,x:`${inr2(P.cpr)} → ${inr2(T.cpr)} vs the previous ${R} days. ${T.cpm&&P.cpm&&T.cpm>P.cpm*1.15?'Ads also became costlier to show (CPM up), so the audience may be getting saturated.':'Check which campaign got worse below.'}`});
+    else if(ch<=-15) good.push({t:`Cost per ${u} down ${Math.abs(ch).toFixed(0)}%`,x:`${inr2(P.cpr)} → ${inr2(T.cpr)} vs the previous ${R} days. Keep the current creatives running.`});}
+  if(T.results&&P.results&&T.results>=P.results*1.2) good.push({t:`${num(T.results)} ${T.type.toLowerCase()}, up ${Math.round((T.results/P.results-1)*100)}%`,x:`From ${num(P.results)} in the previous ${R} days.`});
+  if(T.ctr!=null&&T.impressions>2000){ if(T.ctr<0.7) bad.push({t:`Low click rate: ${pct(T.ctr,2)}`,x:'Healthy is around 1% or more. The first 3 seconds / first line is not stopping the scroll. Test a stronger hook, a face, or an offer in the visual.'});
+    else if(T.ctr>=1.5) good.push({t:`Strong click rate: ${pct(T.ctr,2)}`,x:'People are interested in the ads. Focus on what happens after the click (form or page).'});}
+  const fLimit=R<=7?2.5:3.5;
+  if(T.freq&&T.freq>fLimit) bad.push({t:`Ad fatigue: frequency ${T.freq.toFixed(1)}`,x:`On average each person saw the ads ${T.freq.toFixed(1)} times. Add 2–3 fresh creatives or widen the audience.`});
+  if(T.cpm&&P.cpm&&T.cpm>P.cpm*1.25) bad.push({t:`Reaching people got ${Math.round((T.cpm/P.cpm-1)*100)}% costlier`,x:`CPM ${inr2(P.cpm)} → ${inr2(T.cpm)}. Often a sign of a small or tired audience, or festival-season competition.`});
+  if(T.roas!=null){ if(T.roas<1) bad.push({t:`ROAS ${T.roas.toFixed(2)}×: losing money`,x:`Sales worth ${inr(T.value)} from ${inr(T.spend)} spend.`}); else if(T.roas>=2) good.push({t:`ROAS ${T.roas.toFixed(2)}×`,x:`Sales worth ${inr(T.value)} from ${inr(T.spend)} spend.`});}
+  camps.forEach(c=>{
+    if(c.spend<Math.max(300,T.spend*0.05)) return;
+    const b=c.budget, on=isOn(c.status), avg=avgC(c.type), cu=typeShort(c.type);
+    if(avg&&c.results>=3&&c.cpr<=avg*0.8){
+      const a=[];if(on&&b) a.push(btn(`Scale +20% (₹${num(b.v)} → ₹${num(Math.round(b.v*1.2))})`,{action:'budget',id:b.id,name:c.name,from:b.v,budget:Math.round(b.v*1.2),level:b.level},'a-good'));
+      good.push({t:`Winner: ${c.name}`,x:`${num(c.results)} ${c.type.toLowerCase()} at ${inr2(c.cpr)} each, ${Math.round((1-c.cpr/avg)*100)}% cheaper than average. Give it more budget.`,a});
+    } else if(!c.results&&c.type!=='People reached'&&c.spend>=Math.max(500,(avg||0)*2)){
+      const a=[];if(on) a.push(btn('Pause campaign',{action:'status',id:c.id,name:c.name,status:'PAUSED',level:'campaign'},'a-bad'));
+      bad.push({t:`No results: ${c.name}`,x:`Spent ${inr(c.spend)} with zero ${c.type.toLowerCase()}. Pause it, or check the form/landing page is working.`,a});
+    } else if(avg&&c.cpr>=avg*1.5){
+      const a=[];if(on&&b) a.push(btn(`Cut −20% (₹${num(b.v)} → ₹${num(Math.round(b.v*0.8))})`,{action:'budget',id:b.id,name:c.name,from:b.v,budget:Math.round(b.v*0.8),level:b.level},'a-bad'));
+      if(on) a.push(btn('Pause',{action:'status',id:c.id,name:c.name,status:'PAUSED',level:'campaign'},'a-ghost'));
+      bad.push({t:`Expensive: ${c.name}`,x:`${inr2(c.cpr)} per ${cu}, ${Math.round((c.cpr/avg-1)*100)}% above average. Move budget to the winner or change the creative.`,a});
+    }
+  });
+  const best=ads.filter(a=>a.type===T.type&&a.results>=3&&a.cpr).sort((a,b)=>a.cpr-b.cpr)[0];
+  if(best) good.push({t:`Best ad: ${best.name}`,x:`${inr2(best.cpr)} per ${typeShort(best.type)}, CTR ${best.ctr!=null?pct(best.ctr,2):'—'}. Make 2 more ads in the same style.`});
+  ads.filter(a=>a.tag[0]==='Pause'&&isOn(a.eff)).slice(0,3).forEach(a=>bad.push({t:`Weak ad: ${a.name}`,x:a.tag[2]+'.',a:[btn('Pause ad',{action:'status',id:a.id,name:a.name,status:'PAUSED',level:'ad'},'a-bad')]}));
+  ads.filter(a=>a.prevCtr&&a.ctr!=null&&a.ctr<a.prevCtr*0.7&&a.freq>2.5&&isOn(a.eff)).slice(0,2).forEach(a=>bad.push({t:`Getting tired: ${a.name}`,x:`Click rate fell from ${pct(a.prevCtr,2)} to ${pct(a.ctr,2)} while frequency is ${a.freq.toFixed(1)}. Replace the creative soon.`}));
+  const live=ads.filter(a=>isOn(a.eff)).length;
+  if(live&&live<3) next.push({t:'Add more creatives',x:`Only ${live} ad${live>1?'s are':' is'} running. Meta finds cheaper results with 3–5 different ads (reel, carousel, single image).`});
+  if(!SET.leadValue&&T.leads&&!T.value) next.push({t:'See ROAS for lead ads',x:'Tell the dashboard what one lead is worth: Sheet → Digital Poonam → Set value of one lead. Estimated ROAS then appears here.'});
+  if(T.type==='Leads'&&T.cpr) next.push({t:'Follow up leads within 1 hour',x:`Each lead costs ${inr2(T.cpr)}. Leads called within an hour convert much better; a WhatsApp auto-reply helps.`});
+  const topPost=(DATA.posts||[]).filter(p=>p.reach).sort((a,b)=>b.reach-a.reach)[0];
+  if(topPost) next.push({t:'Boost your best organic post',x:`"${String(topPost.text||'').slice(0,60)}…" reached ${compact(topPost.reach)} people for free. Boosting proven posts is usually cheaper than new ads.`,a:[btn('Boost this post',{action:'boost',postId:topPost.id,platform:topPost.platform,caption:topPost.text,thumb:topPost.thumb},'a-good')]});
+  return {good:good.slice(0,6),bad:bad.slice(0,6),next:next.slice(0,4)};
+}
+
+function ads(){
+  const M=adsModel(),{T,P}=M,w=buckets();
+  if(!(DATA.adStats||[]).length) return oldAds()+`<p class="sub" style="margin-top:12px">Ad-level suggestions and previews appear after the next sync.</p>`;
+  const I=adInsights(M), u=typeShort(T.type);
+  const roasCard=T.roas!=null?kpi('ROAS',T.roas,P.roas,v=>v.toFixed(2)+'×',null,'var(--ads)')
+    :T.estRoas!=null?kpi('Est. ROAS (lead value ₹'+num(SET.leadValue)+')',T.estRoas,P.estRoas,v=>v.toFixed(2)+'×',null,'var(--ads)')
+    :`<div class="kpi"><div class="lbl"><span class="sw" style="background:var(--ads)"></span>ROAS</div><div class="val">—</div><span class="delta flat">${T.leads?'Lead ads: set the value of one lead in the Sheet menu':'No purchase value tracked by the pixel'}</span></div>`;
+  const card=(cls,title,list,emptyMsg)=>`<section class="panel ins ${cls}"><h2>${title}</h2>${list.length?list.map(i=>`<div class="ins-item"><b>${esc(i.t)}</b><p>${esc(i.x)}</p>${i.a&&i.a.length?`<div class="ins-acts">${i.a.join('')}</div>`:''}</div>`).join(''):`<p class="sub">${emptyMsg}</p>`}</section>`;
+  return `
+  <div class="grid kpis k4">
+    ${kpi('Amount spent',T.spend,P.spend,inr,w.map(r=>r.ad_spend),'var(--ads)')}
+    ${kpi(T.type,T.results,P.type===T.type?P.results:null,num,T.type==='Leads'?w.map(r=>r.ad_leads):null,'var(--ads)')}
+    ${kpi('Cost per '+u,T.cpr,P.type===T.type?P.cpr:null,inr2,null,'var(--ads)',true)}
+    ${roasCard}
+    ${kpi('CTR (link)',T.ctr,P.ctr,v=>pct(v,2),null,'var(--ads)')}
+    ${kpi('CPM',T.cpm,P.cpm,inr2,null,'var(--ads)',true)}
+    ${kpi('Cost per link click',T.cpc,P.cpc,inr2,null,'var(--ads)',true)}
+    ${kpi('Frequency',T.freq,P.freq,v=>v.toFixed(2),null,'var(--ads)',true)}
+  </div>
+  <div class="grid ins3" style="margin-top:16px">
+    ${card('ins-good','✅ What is going right',I.good,'Nothing stands out yet.')}
+    ${card('ins-bad','⚠️ What is going wrong',I.bad,'No problems found in this period. 👍')}
+    ${card('ins-next','👉 Do this next',I.next,'Nothing pending.')}
+  </div>
+  ${SET.actionsEnabled?'':`<p class="note">Buttons need an Action PIN first: Sheet → Digital Poonam → <b>Set Action PIN &amp; spend limits</b>.</p>`}
+  <div class="section-title">Campaigns · last ${state.range} days</div>
+  <section class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Campaign</th><th>Status</th><th>Daily budget</th><th>Spend</th><th>Results</th><th>Cost / result</th><th>ROAS</th><th>CTR</th><th>CPM</th><th>Freq.</th></tr></thead>
+    <tbody>${M.camps.map(c=>{const b=c.budget,on=isOn(c.status),st=String(c.status||'').toUpperCase();
+      const roas=c.roas!=null?c.roas.toFixed(2)+'×':c.estRoas!=null?'~'+c.estRoas.toFixed(2)+'×':'—';
+      return `<tr><td><b>${esc(c.name)}</b><div class="sub" style="margin:2px 0 0">${esc(String(c.objective||'').replace('OUTCOME_','').toLowerCase())} · ${c.ads} ad${c.ads>1?'s':''}</div></td>
+      <td><span class="status ${on?'s-good':'s-warn'}">${on?'Active':st==='PAUSED'?'Paused':esc(st.toLowerCase()||'—')}</span><div>${on?btn('Pause',{action:'status',id:c.id,name:c.name,status:'PAUSED',level:'campaign'},'a-ghost sm'):btn('Resume',{action:'status',id:c.id,name:c.name,status:'ACTIVE',level:'campaign'},'a-ghost sm')}</div></td>
+      <td>${b?`<div class="bud">${btn('−',{action:'budget',id:b.id,name:c.name,from:b.v,budget:Math.round(b.v*0.8),level:b.level},'a-ghost sm')}<span>₹${num(b.v)}</span>${btn('+',{action:'budget',id:b.id,name:c.name,from:b.v,budget:Math.round(b.v*1.2),level:b.level},'a-ghost sm')}</div><div class="sub" style="margin:2px 0 0">${b.level} budget</div>`:'<span class="sub">lifetime / mixed</span>'}</td>
+      <td>${inr(c.spend)}</td><td>${num(c.results)} <span class="sub">${esc(c.type.toLowerCase())}</span></td><td>${c.cpr?inr2(c.cpr):'—'}</td><td>${roas}</td>
+      <td>${c.ctr!=null?pct(c.ctr,2):'—'}</td><td>${c.cpm?inr2(c.cpm):'—'}</td><td>${c.freq?c.freq.toFixed(1):'—'}</td></tr>`}).join('')||`<tr><td colspan="10">${empty('No campaigns ran in this period.')}</td></tr>`}</tbody></table></div></section>
+  <div class="section-title">Ads · with previews</div>
+  <div class="cards adcards">${M.ads.map(a=>{const m=a.m||{},on=isOn(a.eff),link=m.preview||m.permalink;
+    return `<article class="pcard adcard"><div class="pc-img">${thumb({thumb:m.thumb,format:'Ad'})}<span class="tag ${a.tag[1]}">${a.tag[0]}</span>
+      <span class="pc-badge" style="background:${on?'var(--good)':'var(--muted)'}">${on?'Live':'Off'}</span></div>
+      <div class="pc-body"><b class="ad-name">${esc(a.name)}</b>${m.title?`<p class="pc-text" style="font-weight:600">${esc(m.title)}</p>`:''}${m.body?`<p class="pc-text">${esc(m.body)}</p>`:''}
+      <p class="ad-why">${esc(a.tag[2])}</p>
+      <div class="pc-stats"><span><b>${inr(a.spend)}</b> spent</span><span><b>${num(a.results)}</b> ${esc(typePlural(a.type))}</span><span><b>${a.cpr?inr2(a.cpr):'—'}</b> each</span><span><b>${a.ctr!=null?pct(a.ctr,2):'—'}</b> CTR</span><span><b>${a.freq?a.freq.toFixed(1):'—'}</b> freq</span></div>
+      <div class="ins-acts">${on?btn('Pause',{action:'status',id:a.id,name:a.name,status:'PAUSED',level:'ad'},'a-ghost sm'):btn('Resume',{action:'status',id:a.id,name:a.name,status:'ACTIVE',level:'ad'},'a-ghost sm')}${link?`<a class="abtn a-ghost sm" href="${esc(link)}" target="_blank" rel="noopener">Preview ↗</a>`:''}</div>
+      </div></article>`}).join('')||empty('No ads in this period.')}</div>
+  <div class="grid two" style="margin-top:16px">
+    <section class="panel"><h2>Cost per lead</h2><p class="sub">₹ per lead, per ${per()}</p><div id="adCpl"></div></section>
+    <section class="panel"><h2>Recent changes from this app</h2>${(DATA.actions||[]).length?`<ul class="alog">${DATA.actions.map(x=>`<li><span>${esc(new Date(x.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}))}</span> <b>${esc(x.action)}</b> · ${esc(x.target)}<br><span class="sub">${esc(x.result)} · ${esc(x.from)}</span></li>`).join('')}</ul>`:empty('No changes made from the app yet.')}</section>
+  </div>`;
+}
 function afterAds(){
   const rows=buckets(),c=slice(state.range);
-  if(S(c,'ad_leads')>0) lineChart($('#adCpl'),rows.filter(r=>r.ad_leads),[{name:'CPL',color:css('--ads'),get:r=>r.ad_spend/r.ad_leads}],inr2,{area:true,label:'Cost per lead'});
-  else $('#adCpl').innerHTML=empty('No leads recorded in this period.');
-  if(S(c,'ad_link_clicks')>0) barChart($('#adClicks'),rows,r=>r.ad_link_clicks||0,css('--ads'),num,{name:'Link clicks',label:'Link clicks'});
-  else $('#adClicks').innerHTML=empty('No link clicks in this period.');
+  const el=$('#adCpl'); if(!el) return;
+  if(S(c,'ad_leads')>0) lineChart(el,rows.filter(r=>r.ad_leads),[{name:'CPL',color:css('--ads'),get:r=>r.ad_spend/r.ad_leads}],inr2,{area:true,label:'Cost per lead'});
+  else el.innerHTML=empty('No leads recorded in this period.');
+  const oc=$('#adClicks'); if(oc){ if(S(c,'ad_link_clicks')>0) barChart(oc,rows,r=>r.ad_link_clicks||0,css('--ads'),num,{name:'Link clicks',label:'Link clicks'}); else oc.innerHTML=empty('No link clicks in this period.'); }
 }
+
+/* ---------- action dialog (pause / budget / boost) ---------- */
+let ACT_PIN=null, ACT_PIN_AT=0;
+function sendAction(payload){
+  if(window.DP_ACTION) return window.DP_ACTION(payload);
+  return new Promise(res=>{try{google.script.run.withSuccessHandler(res).withFailureHandler(e=>res({error:'net',message:String(e&&e.message||e)})).appAction(payload)}catch(e){res({error:'net',message:'Actions are not available here.'})}});
+}
+function openAct(a){
+  const dlg=$('#actDlg');
+  const pinFresh=ACT_PIN&&Date.now()-ACT_PIN_AT<5*60000;
+  let body='';
+  if(a.action==='status') body=`<p><b>${a.status==='PAUSED'?'Pause':'Resume'} ${esc(a.level)}</b><br>${esc(a.name)}</p><p class="sub">${a.status==='PAUSED'?'It stops spending straight away. You can resume any time.':'It starts spending again at its current budget.'}</p>`;
+  if(a.action==='budget') body=`<p><b>Change daily budget</b> (${esc(a.level)})<br>${esc(a.name)}</p>
+    <label class="fld">New daily budget (₹)<input id="aBudget" type="number" inputmode="numeric" min="100" value="${a.budget}"></label>
+    <p class="sub">Now ₹${num(a.from)}/day. Allowed in one step: ₹${num(Math.ceil(a.from*(1-(SET.maxStepPct||30)/100)))} to ₹${num(Math.min(Math.floor(a.from*(1+(SET.maxStepPct||30)/100)),SET.maxDailyBudget||3000))}. Max ever: ₹${num(SET.maxDailyBudget||3000)}/day.</p>`;
+  if(a.action==='boost') body=`<p><b>Boost post</b> on ${esc(a.platform)}</p>${a.thumb?`<img src="${esc(a.thumb)}" alt="" referrerpolicy="no-referrer" class="boost-img">`:''}<p class="sub" style="margin-top:6px">${esc(String(a.caption||'').slice(0,120))}</p>
+    <div class="fld2"><label class="fld">Budget per day (₹)<input id="bBudget" type="number" inputmode="numeric" min="100" max="${SET.maxDailyBudget||3000}" value="300"></label>
+    <label class="fld">Days<input id="bDays" type="number" inputmode="numeric" min="1" max="30" value="5"></label></div>
+    <label class="fld">Where<select id="bPlace"><option value="raipur">Raipur + 40 km</option><option value="india">All India</option><option value="bhopal">Bhopal + 40 km</option><option value="indore">Indore + 40 km</option><option value="nagpur">Nagpur + 40 km</option></select></label>
+    <div class="fld2"><label class="fld">Age from<input id="bAgeMin" type="number" min="18" max="65" value="22"></label><label class="fld">Age to<input id="bAgeMax" type="number" min="18" max="65" value="55"></label></div>
+    <p class="sub" id="bTotal"></p><p class="sub">It is created <b>paused</b>, so nothing is spent until you press Resume on it under Campaigns.</p>`;
+  dlg.innerHTML=`<form method="dialog" class="dlg" id="actForm"><h2>Confirm change</h2>${body}
+    ${SET.actionsEnabled?`<label class="fld" ${pinFresh?'hidden':''}>Action PIN<input id="aPin" type="password" autocomplete="off" ${pinFresh?'':'required'} minlength="8"></label>`:`<p class="err">Actions are switched off. Set an Action PIN first: Sheet → Digital Poonam → Set Action PIN &amp; spend limits.</p>`}
+    <p class="err" id="aErr" role="alert"></p><p class="ok" id="aOk" role="status"></p>
+    <div class="dlg-acts"><button type="button" class="abtn a-ghost" id="aCancel">Cancel</button>${SET.actionsEnabled?`<button type="submit" class="abtn a-good" id="aGo">Confirm</button>`:''}</div></form>`;
+  const tot=()=>{const b=$('#bBudget'),d=$('#bDays');if(b&&d)$('#bTotal').textContent=`Total up to ₹${num((+b.value||0)*(+d.value||0))} over ${+d.value||0} days.`};
+  if(a.action==='boost'){tot();$('#bBudget').addEventListener('input',tot);$('#bDays').addEventListener('input',tot);}
+  $('#aCancel').onclick=()=>dlg.close();
+  const f=$('#actForm');
+  if(f) f.onsubmit=e=>{e.preventDefault();
+    const p=Object.assign({},a); delete p.thumb;
+    if(a.action==='budget') p.budget=Math.round(+$('#aBudget').value);
+    if(a.action==='boost'){p.budget=Math.round(+$('#bBudget').value);p.days=Math.round(+$('#bDays').value);p.place=$('#bPlace').value;p.ageMin=+$('#bAgeMin').value;p.ageMax=+$('#bAgeMax').value;}
+    const pinEl=$('#aPin'); p.actionPin=pinFresh?ACT_PIN:(pinEl?pinEl.value:'');
+    const go=$('#aGo'); go.disabled=true; go.textContent='Working…'; $('#aErr').textContent='';
+    sendAction(p).then(r=>{
+      if(r&&r.ok){ACT_PIN=p.actionPin;ACT_PIN_AT=Date.now();$('#aOk').textContent=r.message+' Refresh to see updated numbers.';go.remove();$('#aCancel').textContent='Close';
+        if(a.action==='status'){Object.values(META).forEach(m=>{if(a.level==='ad'&&m.ad_id===a.id){m.status=a.status;m.effective_status=a.status;} if(a.level==='campaign'&&m.campaign_id===a.id){m.campaign_status=a.status; if(a.status==='PAUSED')m.effective_status='CAMPAIGN_PAUSED';}});}
+        if(a.action==='budget'){Object.values(META).forEach(m=>{if(m.campaign_id===a.id)m.campaign_budget=p.budget;if(m.adset_id===a.id)m.adset_budget=p.budget;});}
+        dlg.addEventListener('close',()=>render(),{once:true});
+      } else {if(r&&r.error==='badactpin'){ACT_PIN=null;const l=$('#aPin');if(l){l.closest('label').hidden=false;l.required=true;l.value='';}}
+        $('#aErr').textContent=(r&&r.message)||'Something went wrong.';go.disabled=false;go.textContent='Try again';}
+    });};
+  dlg.showModal();
+  setTimeout(()=>{const x=$('#aPin');if(x&&!x.closest('label').hidden)x.focus();},50);
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;e.preventDefault();e.stopPropagation();
+  try{openAct(JSON.parse(b.dataset.act))}catch(err){console.error(err)}});
 
 function thumb(r,size){
   const cls=size==='sm'?'th th-sm':'th';
@@ -278,11 +468,12 @@ function thumb(r,size){
 }
 function postCards(list){
   if(!list.length) return '';
-  return `<div class="cards">${list.map(r=>`<a class="pcard" href="${esc(r.link||'#')}" target="_blank" rel="noopener">
+  return `<div class="cards">${list.map(r=>`<div class="pcard"><a class="pc-link" href="${esc(r.link||'#')}" target="_blank" rel="noopener">
     <div class="pc-img">${thumb(r)}<span class="pc-badge" style="background:${r.platform==='Instagram'?'var(--ig)':'var(--fb)'}">${r.platform==='Instagram'?'IG':'FB'} · ${esc(r.format)}</span></div>
     <div class="pc-body"><p class="pc-text">${esc(r.text||'(no caption)')}</p>
     <div class="pc-stats"><span><b>${r.reach!=null?compact(r.reach):'—'}</b> reach</span><span><b>${r.likes!=null?num(r.likes):'—'}</b> likes</span><span><b>${r.comments!=null?num(r.comments):'—'}</b> comments</span></div>
-    <p class="pc-date">${dlabel(toDate(String(r.date).slice(0,10)))}</p></div></a>`).join('')}</div>`;
+    <p class="pc-date">${dlabel(toDate(String(r.date).slice(0,10)))}</p></div></a>
+    <div class="pc-foot">${btn('🚀 Boost',{action:'boost',postId:r.id,platform:r.platform,caption:r.text,thumb:r.thumb},'a-ghost sm')}</div></div>`).join('')}</div>`;
 }
 let sortKey='reach',sortDir=-1;
 function postTable(list){
