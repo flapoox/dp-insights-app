@@ -27,7 +27,7 @@ for(let i=DAYS-1;i>=0;i--){ const d=new Date(END); d.setDate(END.getDate()-i);
   KEYS.forEach(k=>{ const v=src[k]; o[k] = (v===null||v===undefined||v==='')?null:Number(v); }); days.push(o); }
 
 const state={tab:'overview',range:30,yt:'all'};
-try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt}catch(e){}
+try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt;if(s.cw)state.cw=s.cw}catch(e){}
 const save=()=>{try{localStorage.setItem('dpi-live',JSON.stringify(state))}catch(e){}};
 
 function slice(n,offset=0){return days.slice(DAYS-n*(offset+1),DAYS-n*offset)}
@@ -739,6 +739,77 @@ function afterScripts(){
 }
 function alertBox(msg){const n=document.createElement('div');n.className='toast';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),3500)}
 
+/* ---------- Competition ---------- */
+const CMP=DATA.comp||{}, HS='https:'+'/'+'/';
+const CR=(CMP.creators||[]).map(c=>({...c,key:c.platform+':'+c.handle,isMe:c.self==='yes'}));
+const CP=(CMP.posts||[]).map(p=>({...p,eng:Nn(p.eng),ratio:Nn(p.ratio),likes:Nn(p.likes),comments:Nn(p.comments),views:Nn(p.views)}));
+if(![7,30].includes(state.cw)) state.cw=7;
+const crOf=h=>CR.find(c=>c.handle===h)||{};
+const profUrl=c=>c.platform==='yt'?HS+'www.youtube.com/@'+encodeURIComponent(c.handle):HS+'www.instagram.com/'+encodeURIComponent(c.handle)+'/';
+const adLib=c=>HS+'www.facebook.com/ads/library/?active_status=active&ad_type=all&country=IN&search_type=keyword_unordered&q='+encodeURIComponent(c.name||c.handle);
+const gAds=HS+'adstransparency.google.com/?region=IN';
+function growth(c){
+  const h=(CMP.history||[]).filter(r=>r.handle===c.key&&Nn(r.followers)!=null).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(h.length<2) return null;
+  const last=h[h.length-1],lim=ymd(new Date(toDate(last.date).getTime()-7*864e5));
+  const base=h.filter(r=>r.date<=lim).pop()||h[0];
+  return {n:+last.followers-(+base.followers),days:Math.round((toDate(last.date)-toDate(base.date))/864e5)};
+}
+function compBrief(p){const c=crOf(p.handle);
+  return ['REFERENCE (do not copy, make our version)','Creator: '+(c.name||p.handle)+' (@'+p.handle+')','Link: '+p.link,
+    'Why: '+(p.ratio!=null?p.ratio+'x their usual engagement':'top post')+', posted '+p.date,'Their caption: '+(p.text||'—'),'',
+    'OUR VERSION','Audience: homemakers (Road 1: marketer for local shops / Road 2: own skill online)','Type: CLONE / FACELESS / FACE / ANIMATION (pick one)',
+    'Hook (first 2 sec): ','Our angle: ','CTA: comment keyword'].join('\n')}
+function competition(){
+  if(!CR.length) return `<section class="panel">${empty('No competition data yet. In the Google Sheet run <b>Digital Poonam → Competition → Sync competition now</b>, then reload.')}</section>`;
+  const W=state.cw,from=ymd(new Date(Date.now()-W*864e5));
+  const others=CR.filter(c=>!c.isMe).map(c=>c.handle);
+  const inWin=CP.filter(p=>others.includes(p.handle)&&p.date>=from&&p.ratio!=null);
+  let viral=inWin.filter(p=>p.ratio>=2).sort((a,b)=>b.ratio-a.ratio),fallback=false;
+  if(!viral.length){viral=inWin.slice().sort((a,b)=>b.ratio-a.ratio).slice(0,6);fallback=true}
+  const errs=CR.filter(c=>c.status&&c.status!=='ok');
+  const rows=CR.slice().sort((a,b)=>(b.isMe-a.isMe)||((+b.followers||0)-(+a.followers||0)));
+  const fmtBy={};CP.filter(p=>others.includes(p.handle)&&p.date>=ymd(new Date(Date.now()-30*864e5))).forEach(p=>{const f=fmtBy[p.kind]=fmtBy[p.kind]||{n:0,hit:0};f.n++;if(p.ratio>=2)f.hit++});
+  const me=CR.find(c=>c.isMe),meP=me?CP.filter(p=>p.handle===me.handle):[];
+  return `
+  <p class="sub" style="margin:0 0 12px">Public data from ${CR.filter(c=>!c.isMe).length} creators you follow (Instagram business/creator accounts and YouTube). Refreshes every morning. <b>Viral</b> = a post with at least 2× that creator's usual engagement (likes + comments; views on YouTube).</p>
+  ${errs.map(c=>`<p class="note">⚠️ @${esc(c.handle)}: ${esc(c.status)}</p>`).join('')}
+  <div class="ytbar"><div class="seg" id="cwSeg" aria-label="Window"><button data-v="7" aria-pressed="${W===7}">This week</button><button data-v="30" aria-pressed="${W===30}">Last 30 days</button></div>
+    <span class="sub" style="margin:0">${fallback?`No 2× outliers in the last ${W} days, showing their best posts instead.`:`${viral.length} viral post${viral.length===1?'':'s'} in the last ${W} days`}</span></div>
+  <div class="section-title">🔥 ${fallback?'Best performing':'Viral'} · click a card to open, copy a brief for your editor</div>
+  ${viral.length?`<div class="cards compcards">${viral.slice(0,12).map((p,i)=>{const c=crOf(p.handle);return `<div class="pcard">
+    <a class="pc-link" href="${esc(p.link)}" target="_blank" rel="noopener"><div class="pc-img ${p.platform==='yt'?'yt':''}">${thumb({thumb:p.thumb,format:p.kind})}<span class="pc-badge" style="background:${p.ratio>=2?'var(--yt)':'var(--accent)'}">${p.ratio!=null?p.ratio+'× usual':''}</span><span class="pc-kind">${esc(p.kind)}</span></div>
+    <div class="pc-body"><p class="pc-who">${esc(c.name||p.handle)} <span>@${esc(p.handle)}</span></p><p class="pc-text">${esc(p.text||'(no caption)')}</p>
+    <div class="pc-stats">${p.platform==='yt'?`<span><b>${compact(p.views||0)}</b> views</span>`:''}${p.likes!=null?`<span><b>${compact(p.likes)}</b> likes</span>`:`<span>likes hidden</span>`}<span><b>${compact(p.comments||0)}</b> comments</span></div>
+    <p class="pc-date">${p.date?dlabel(toDate(p.date)):''}</p></div></a>
+    <div class="pc-foot"><button class="abtn a-ghost cp-brief" data-i="${i}">📋 Copy brief for editor</button></div></div>`}).join('')}</div>`:empty('No posts from these creators in this window yet.')}
+  <div class="section-title">Creators side by side</div>
+  <section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Creator</th><th>Followers</th><th>Growth</th><th>Posts (14 days)</th><th>Usual engagement</th><th>Engagement rate</th><th>Viral (30d)</th><th>Research</th></tr></thead>
+  <tbody>${rows.map(c=>{const g=growth(c),v30=CP.filter(p=>p.handle===c.handle&&p.date>=ymd(new Date(Date.now()-30*864e5))&&p.ratio>=2).length,er=Nn(c.followers)&&Nn(c.median_eng)!=null?(+c.median_eng)/(+c.followers)*100:null;
+    return `<tr class="${c.isMe?'me':''}"><td class="post-title"><div class="pt">${c.pic?`<img class="th th-sm" style="border-radius:50%" src="${esc(c.pic)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<a href="${esc(profUrl(c))}" target="_blank" rel="noopener" style="color:inherit"><b>${esc(c.name||c.handle)}</b>${c.isMe?' <span class="pill">You</span>':''}<br><span class="sub" style="margin:0">${c.platform==='yt'?'YouTube':'Instagram'} · @${esc(c.handle)}</span></a></div></td>
+    <td>${Nn(c.followers)!=null?compact(+c.followers):'—'}</td><td>${g?`<span class="${g.n>=0?'up':'down'}">${g.n>=0?'+':''}${compact(g.n)}</span> <span class="sub" style="margin:0">${g.days}d</span>`:'<span class="sub" style="margin:0">from tomorrow</span>'}</td>
+    <td>${Nn(c.posts_14d)!=null?num(+c.posts_14d):'—'}</td><td>${Nn(c.median_eng)!=null?compact(+c.median_eng)+(c.platform==='yt'?' views':''):'—'}</td><td>${er!=null&&c.platform!=='yt'?er.toFixed(2)+'%':'—'}</td><td>${v30||'—'}</td>
+    <td class="rs">${c.isMe?'':`${c.platform==='ig'?`<a href="${esc(adLib(c))}" target="_blank" rel="noopener">Their ads</a>`:''}<a href="${esc(profUrl(c))}" target="_blank" rel="noopener">Profile</a>`}</td></tr>`}).join('')}</tbody></table></div>
+  <p class="sub" style="margin-top:10px">Engagement rate = usual (median) likes + comments ÷ followers. Growth fills in as daily snapshots build up. "Their ads" opens Meta Ad Library (the official public list of running ads). For Google/YouTube ads use <a href="${esc(gAds)}" target="_blank" rel="noopener">Google Ads Transparency Center</a>.</p></section>
+  <div class="grid two" style="margin-top:16px">
+    <section class="panel"><h2>What format wins for them</h2><p class="sub">Last 30 days, all creators</p>${Object.keys(fmtBy).length?`<ul class="clist">${Object.keys(fmtBy).sort((a,b)=>fmtBy[b].n-fmtBy[a].n).map(k=>`<li><b>${esc(k)}</b>: ${fmtBy[k].n} posts, ${fmtBy[k].hit} went viral (${Math.round(fmtBy[k].hit/fmtBy[k].n*100)}%)</li>`).join('')}</ul>`:empty('Not enough posts yet.')}</section>
+    <section class="panel"><h2>How to use this</h2><ul class="clist">
+      <li>Every Monday open <b>This week</b>. Pick 2 viral posts that fit Road 1 or Road 2.</li>
+      <li>Tap <b>Copy brief</b>, paste it to your editor on WhatsApp, and fill the hook and type.</li>
+      <li>Never copy words or visuals. Copy the <b>idea and structure</b>, then say it your way.</li>
+      ${me?`<li>Your usual engagement is <b>${compact(+me.median_eng||0)}</b> per post; ${meP.filter(p=>p.ratio>=2).length} of your last ${meP.length} posts went 2× viral.</li>`:''}
+    </ul></section>
+  </div>`;
+}
+function afterCompetition(){
+  const seg=$('#cwSeg');if(seg)seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.cw=+b.dataset.v;save();render()});
+  const W=state.cw,from=ymd(new Date(Date.now()-W*864e5)),others=CR.filter(c=>!c.isMe).map(c=>c.handle);
+  const inWin=CP.filter(p=>others.includes(p.handle)&&p.date>=from&&p.ratio!=null);
+  let viral=inWin.filter(p=>p.ratio>=2).sort((a,b)=>b.ratio-a.ratio);if(!viral.length)viral=inWin.slice().sort((a,b)=>b.ratio-a.ratio).slice(0,6);
+  document.querySelectorAll('.cp-brief').forEach(b=>b.addEventListener('click',()=>{const p=viral[+b.dataset.i];if(!p)return;
+    copyText(compBrief(p)).then(ok=>{b.textContent=ok?'✓ Copied':'Copy failed';setTimeout(()=>b.textContent='📋 Copy brief for editor',1800)})}));
+}
+
 /* teleprompter: front camera behind, script in a see-through strip at the top */
 let TP=null;
 function openTeleprompter(x){
@@ -807,7 +878,7 @@ function closeTeleprompter(){if(!TP)return;const {el,tp}=TP;tp.run=false;clearIn
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
 const views={overview:[overview,afterOverview],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
-  ads:[ads,afterAds],youtube:[youtube,afterYoutube],scripts:[scriptsView,afterScripts],posts:[postsView,bindSort],audience:[audience,afterAudience]};
+  ads:[ads,afterAds],youtube:[youtube,afterYoutube],scripts:[scriptsView,afterScripts],competition:[competition,afterCompetition],posts:[postsView,bindSort],audience:[audience,afterAudience]};
 if(!views[state.tab]) state.tab='overview';
 function render(){
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===state.tab));
