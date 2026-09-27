@@ -26,8 +26,8 @@ for(let i=DAYS-1;i>=0;i--){ const d=new Date(END); d.setDate(END.getDate()-i);
   const src = byDate[ymd(d)]||{}; const o={d};
   KEYS.forEach(k=>{ const v=src[k]; o[k] = (v===null||v===undefined||v==='')?null:Number(v); }); days.push(o); }
 
-const state={tab:'overview',range:30,yt:'all'};
-try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt;if(s.cw)state.cw=s.cw}catch(e){}
+const state={tab:'home',range:30,yt:'all'};
+try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt;if(s.cw)state.cw=s.cw;if(s.hp)state.hp=s.hp}catch(e){}
 const save=()=>{try{localStorage.setItem('dpi-live',JSON.stringify(state))}catch(e){}};
 
 function slice(n,offset=0){return days.slice(DAYS-n*(offset+1),DAYS-n*offset)}
@@ -141,52 +141,6 @@ function barChart(host,rows,get,color,fmt,opts={}){
 
 
 /* ---------- views ---------- */
-function overview(){
-  const c=slice(state.range),p=slice(state.range,1),w=buckets();
-  const reachOf=a=>{const x=S(a,'ig_reach'),y=S(a,'fb_reach');return x==null&&y==null?null:(x||0)+(y||0)};
-  const engOf=a=>{const x=S(a,'ig_interactions'),y=S(a,'fb_engagements');return x==null&&y==null?null:(x||0)+(y||0)};
-  const folOf=a=>{const f=S(a,'fb_new_follows'),i=S(a,'ig_follows'),u=S(a,'ig_unfollows');return f==null&&i==null?null:(f||0)+(i||0)-(u||0)};
-  const spend=S(c,'ad_spend'),leads=S(c,'ad_leads'),pSpend=S(p,'ad_spend'),pLeads=S(p,'ad_leads');
-  const cpl=leads?spend/leads:null, pcpl=pLeads?pSpend/pLeads:null;
-  const igR=S(c,'ig_reach'),fbR=S(c,'fb_reach');
-  const from=c[0].d, inP=(DATA.posts||[]).filter(x=>x.date&&toDate(x.date)>=from&&x.reach!=null).sort((a,b)=>b.reach-a.reach);
-  const best=inP[0];
-  const bestDay=has(c,'ad_leads')?c.reduce((a,b)=>(b.ad_leads||0)>(a.ad_leads||0)?b:a):null;
-  const ins=[];
-  if(igR!=null&&fbR!=null&&igR+fbR>0) ins.push(['i',`Instagram delivers <b>${(igR/(igR+fbR)*100).toFixed(0)}%</b> of organic reach; Facebook ${(fbR/(igR+fbR)*100).toFixed(0)}%.`]);
-  if(best) ins.push(['g',`Top post: <b>${esc(best.text||'(no caption)')}</b> (${best.format}, ${best.platform}) reached ${compact(best.reach)} accounts.`]);
-  if(cpl!=null&&pcpl!=null) ins.push([cpl<=pcpl?'g':'w',`Cost per lead ${cpl<=pcpl?'fell':'rose'} to <b>${inr2(cpl)}</b> from ${inr2(pcpl)} in the previous ${state.range} days.`]);
-  if(bestDay&&bestDay.ad_leads) ins.push(['i',`Best lead day: <b>${dlabel(bestDay.d)}</b> with ${num(bestDay.ad_leads)} leads on ${inr(bestDay.ad_spend||0)} spend.`]);
-  const igF=lastVal(c,'ig_followers'),fbF=lastVal(c,'fb_followers');
-  if(igF!=null||fbF!=null) ins.push(['i',`Followers now: Instagram <b>${igF!=null?num(igF):'—'}</b>, Facebook Page <b>${fbF!=null?num(fbF):'—'}</b>.`]);
-  return `
-  <div class="grid kpis">
-    ${kpi('Total reach (FB + IG)',reachOf(c),reachOf(p),compact,w.map(r=>(r.ig_reach||0)+(r.fb_reach||0)),'var(--accent)')}
-    ${kpi('Engagements',engOf(c),engOf(p),compact,w.map(r=>(r.ig_interactions||0)+(r.fb_engagements||0)),'var(--accent)')}
-    ${kpi('Net followers gained',folOf(c),folOf(p),num,w.map(r=>(r.fb_new_follows||0)+(r.ig_follows||0)-(r.ig_unfollows||0)),'var(--accent)')}
-    ${kpi('Ad spend',spend,pSpend,inr,w.map(r=>r.ad_spend),'var(--ads)')}
-    ${kpi('Leads from ads',leads,pLeads,num,w.map(r=>r.ad_leads),'var(--ads)')}
-    ${kpi('Cost per lead',cpl,pcpl,inr2,w.map(r=>r.ad_leads?r.ad_spend/r.ad_leads:null),'var(--ads)',true)}
-  </div>
-  <div class="grid two" style="margin-top:16px">
-    <section class="panel"><h2>Organic reach by platform</h2><p class="sub">Accounts reached per ${per()}</p>
-      <div class="legend"><span><i class="sw" style="background:var(--ig)"></i>Instagram</span><span><i class="sw" style="background:var(--fb)"></i>Facebook</span></div>
-      <div id="ovReach"></div></section>
-    <section class="panel"><h2>What changed this period</h2><p class="sub">Worked out from the numbers on this page</p>
-      ${ins.length?`<ul class="insights">${ins.map(x=>`<li><span class="ic ${x[0]}">${x[0]==='g'?'↑':x[0]==='w'?'!':'i'}</span><span>${x[1]}</span></li>`).join('')}</ul>`:empty('Not enough data yet.')}</section>
-  </div>
-  <div class="grid two" style="margin-top:16px">
-    <section class="panel"><h2>Ad spend</h2><p class="sub">₹ per ${per()}</p><div id="ovSpend"></div></section>
-    <section class="panel"><h2>Leads</h2><p class="sub">Leads per ${per()}</p><div id="ovLeads"></div></section>
-  </div>`;
-}
-function afterOverview(){
-  const rows=buckets(), c=slice(state.range);
-  if(has(c,'ig_reach')||has(c,'fb_reach')) lineChart($('#ovReach'),rows,[{name:'Instagram',color:css('--ig'),get:r=>r.ig_reach||0},{name:'Facebook',color:css('--fb'),get:r=>r.fb_reach||0}],num,{label:'Organic reach by platform'});
-  else $('#ovReach').innerHTML=empty('No reach data yet.');
-  if(has(c,'ad_spend')) barChart($('#ovSpend'),rows,r=>r.ad_spend||0,css('--ads'),inr,{name:'Spend',tick:v=>'₹'+compact(v),label:'Ad spend'}); else $('#ovSpend').innerHTML=empty('No ad spend in this period.');
-  if(has(c,'ad_leads')&&S(c,'ad_leads')>0) barChart($('#ovLeads'),rows,r=>r.ad_leads||0,css('--ads'),num,{name:'Leads',label:'Leads'}); else $('#ovLeads').innerHTML=empty('No leads recorded in this period.');
-}
 
 function platform(which){
   const ig=which==='ig', c=slice(state.range),p=slice(state.range,1),w=buckets();
@@ -869,6 +823,170 @@ function closeTeleprompter(){if(!TP)return;const {el,tp}=TP;tp.run=false;clearIn
   if(tp.stream)tp.stream.getTracks().forEach(t=>t.stop());el.remove();document.body.style.overflow='';TP=null}
 
 /* ---------- header + render ---------- */
+/* ---------- Home + Channels + Website (new look) ---------- */
+const WEB=DATA.web||{};
+const WEB_ON=!!(WEB.daily&&WEB.daily.length);
+const PLAT={
+  ig:{name:'Instagram',short:'IG',color:'#D6358F',tab:'instagram'},
+  fb:{name:'Facebook',short:'FB',color:'#1668D9',tab:'facebook'},
+  ads:{name:'Meta Ads',short:'Ad',color:'#0F8A6A',tab:'ads'},
+  yt:{name:'YouTube',short:'YT',color:'#D92D20',tab:'youtube'},
+  web:{name:'Website',short:'W',color:'#6D28D9',tab:'website'}
+};
+const PEND=[['gbp','Google Business','G','#B45309','Waiting for Google approval','pend'],['pin','Pinterest','Pi','#BD081C','Approval pending','pend'],
+  ['li','LinkedIn','in','#0A66C2','Approval pending','pend'],['gads','Google Ads','GA','#475467','Not connected','off']];
+const pbadge=k=>`<span class="pbadge" style="background:${PLAT[k].color}">${PLAT[k].short}</span>`;
+function chg(c,p,invert){
+  if(c==null||p==null||!p) return '';
+  const ch=(c-p)/Math.abs(p)*100, good=invert?ch<0:ch>0;
+  return `<span class="${Math.abs(ch)<0.5?'flat':good?'up':'down'}">${ch>0?'▲':'▼'} ${Math.abs(ch).toFixed(Math.abs(ch)<10?1:0)}%</span>`;
+}
+const fmtOr=(v,f)=>v==null?'—':f(v);
+function webDaysArr(){
+  const by={};(WEB.daily||[]).forEach(r=>by[String(r.date).slice(0,10)]=r);
+  return days.map(o=>{const r=by[ymd(o.d)]||{};return {d:o.d,users:Nn(r.users),sessions:Nn(r.sessions),views:Nn(r.views),engaged:Nn(r.engaged),avg:Nn(r.avg_sec)}});
+}
+function platData(k){
+  const R=state.range,c=slice(R),p=slice(R,1),last14=days.slice(-14);
+  if(k==='ig'){
+    if(!has(c,'ig_reach')&&!has(c,'ig_followers')) return null;
+    const posts=(DATA.posts||[]).filter(x=>x.platform==='Instagram'&&x.date&&toDate(x.date)>=c[0].d).length;
+    return {tile:{v:fmtOr(S(c,'ig_reach'),compact),l:'Reach · '+R+'d',d:chg(S(c,'ig_reach'),S(p,'ig_reach'))},
+      row1:[['Reach',fmtOr(S(c,'ig_reach'),compact),chg(S(c,'ig_reach'),S(p,'ig_reach'))],['Followers',fmtOr(lastVal(c,'ig_followers'),num),chg(lastVal(c,'ig_followers'),lastVal(p,'ig_followers'))],['Posts',num(posts),'']],
+      row2:[['Views',fmtOr(S(c,'ig_views'),compact)],['Interactions',fmtOr(S(c,'ig_interactions'),compact)],['Profile',fmtOr(S(c,'ig_profile_views'),compact)]],
+      chart:'Reach per day',bars:last14.map(d=>d.ig_reach),fmt:num};
+  }
+  if(k==='fb'){
+    if(!has(c,'fb_reach')&&!has(c,'fb_followers')) return null;
+    return {tile:{v:fmtOr(lastVal(c,'fb_followers'),compact),l:'Followers',d:chg(lastVal(c,'fb_followers'),lastVal(p,'fb_followers'))},
+      row1:[['Reach',fmtOr(S(c,'fb_reach'),compact),chg(S(c,'fb_reach'),S(p,'fb_reach'))],['Followers',fmtOr(lastVal(c,'fb_followers'),num),chg(lastVal(c,'fb_followers'),lastVal(p,'fb_followers'))],['Engaged',fmtOr(S(c,'fb_engagements'),compact),chg(S(c,'fb_engagements'),S(p,'fb_engagements'))]],
+      row2:[['Views',fmtOr(S(c,'fb_views'),compact)],['New follows',fmtOr(S(c,'fb_new_follows'),num)],['',' ']],
+      chart:'Reach per day',bars:last14.map(d=>d.fb_reach),fmt:num};
+  }
+  if(k==='ads'){
+    if(!has(c,'ad_spend')&&!has(p,'ad_spend')) return null;
+    const sp=S(c,'ad_spend'),ld=S(c,'ad_leads'),psp=S(p,'ad_spend'),pld=S(p,'ad_leads');
+    const cpl=ld?sp/ld:null,pcpl=pld?psp/pld:null;
+    return {tile:{v:fmtOr(sp,inr),l:'Spend · '+R+'d',d:chg(sp,psp)},
+      row1:[['Spend',fmtOr(sp,inr),chg(sp,psp)],['Leads',fmtOr(ld,num),chg(ld,pld)],['Per lead',fmtOr(cpl,inr),chg(cpl,pcpl,true)]],
+      row2:[['Reach',fmtOr(S(c,'ad_reach'),compact)],['Clicks',fmtOr(S(c,'ad_clicks'),compact)],['Link clicks',fmtOr(S(c,'ad_link_clicks'),compact)]],
+      chart:'Spend per day',bars:last14.map(d=>d.ad_spend),fmt:inr};
+  }
+  if(k==='yt'){
+    if(!YCH.length) return null;
+    const {arr}=ytDays(YCH.map(x=>x.channel_id)); if(!arr.length) return null;
+    const cc=arr.slice(DAYS-R),pp=arr.slice(DAYS-2*R,DAYS-R);
+    const subs=YCH.reduce((s,x)=>s+(Nn(x.subs)||0),0),vids=YCH.reduce((s,x)=>s+(Nn(x.videos)||0),0);
+    const net=a=>{const g=S(a,'gained'),l=S(a,'lost');return g==null?null:g-(l||0)};
+    return {tile:{v:fmtOr(S(cc,'views'),compact),l:'Views · '+R+'d',d:chg(S(cc,'views'),S(pp,'views'))},
+      row1:[['Subscribers',num(subs),net(cc)!=null?`<span class="up">+${num(net(cc))}</span>`:''],['Views',fmtOr(S(cc,'views'),compact),chg(S(cc,'views'),S(pp,'views'))],['Videos',num(vids),'']],
+      row2:[['Watch hrs',fmtOr(S(cc,'minutes')!=null?S(cc,'minutes')/60:null,compact)],['Likes',fmtOr(S(cc,'likes'),num)],['Comments',fmtOr(S(cc,'comments'),num)]],
+      chart:'Views per day',bars:arr.slice(-14).map(d=>d.views),fmt:num};
+  }
+  if(k==='web'){
+    if(!WEB_ON) return null;
+    const a=webDaysArr(),cc=a.slice(DAYS-R),pp=a.slice(DAYS-2*R,DAYS-R);
+    return {tile:{v:fmtOr(S(cc,'users'),compact),l:'Visitors · '+R+'d',d:chg(S(cc,'users'),S(pp,'users'))},
+      row1:[['Visitors',fmtOr(S(cc,'users'),compact),chg(S(cc,'users'),S(pp,'users'))],['Sessions',fmtOr(S(cc,'sessions'),compact),chg(S(cc,'sessions'),S(pp,'sessions'))],['Page views',fmtOr(S(cc,'views'),compact),chg(S(cc,'views'),S(pp,'views'))]],
+      row2:[['Engaged',fmtOr(S(cc,'engaged'),compact)],['',' '],['',' ']],
+      chart:'Visitors per day',bars:a.slice(-14).map(d=>d.users),fmt:num};
+  }
+  return null;
+}
+const ON=()=>['ig','ads','fb','yt','web'].filter(k=>platData(k));
+if(!state.hp) state.hp='ig';
+
+function homeInsights(){
+  const c=slice(state.range),p=slice(state.range,1),ins=[];
+  const igR=S(c,'ig_reach'),fbR=S(c,'fb_reach');
+  const spend=S(c,'ad_spend'),leads=S(c,'ad_leads'),pSpend=S(p,'ad_spend'),pLeads=S(p,'ad_leads');
+  const cpl=leads?spend/leads:null,pcpl=pLeads?pSpend/pLeads:null;
+  const inP=(DATA.posts||[]).filter(x=>x.date&&toDate(x.date)>=c[0].d&&x.reach!=null).sort((a,b)=>b.reach-a.reach),best=inP[0];
+  if(igR!=null&&fbR!=null&&igR+fbR>0) ins.push(['i',`Instagram brings <b>${(igR/(igR+fbR)*100).toFixed(0)}%</b> of your organic reach, Facebook ${(fbR/(igR+fbR)*100).toFixed(0)}%.`]);
+  if(best) ins.push(['g',`Top post: <b>${esc(String(best.text||'(no caption)').slice(0,70))}</b> (${esc(best.format)}, ${esc(best.platform)}) reached ${compact(best.reach)} accounts.`]);
+  if(cpl!=null&&pcpl!=null) ins.push([cpl<=pcpl?'g':'w',`Cost per lead ${cpl<=pcpl?'fell':'rose'} to <b>${inr2(cpl)}</b> from ${inr2(pcpl)}.`]);
+  const v=CP.filter(x=>x.ratio>=2&&x.date>=ymd(new Date(Date.now()-7*864e5))&&!(CR.find(c=>c.handle===x.handle)||{}).isMe);
+  if(v.length){const f={};v.forEach(x=>f[x.kind]=(f[x.kind]||0)+1);const top=Object.keys(f).sort((a,b)=>f[b]-f[a])[0];ins.push(['i',`Your creators had <b>${v.length} viral posts</b> this week, mostly <b>${esc(top)}s</b>. Try one this week.`]);}
+  return ins;
+}
+
+function home(){
+  const on=ON(); if(!on.includes(state.hp)) state.hp=on[0]||'ig';
+  const hr=new Date().getHours(), greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const cur=platData(state.hp);
+  const bars=cur?cur.bars.map(v=>v==null?0:v):[];const mx=Math.max(1,...bars),top=bars.indexOf(Math.max(...bars));
+  const avg=cur&&bars.length?bars.reduce((s,x)=>s+x,0)/bars.length:0;
+  const todo=SC.filter(x=>x.status!=='Posted').slice(0,3);
+  const vir=CP.filter(x=>x.ratio>=2&&x.date>=ymd(new Date(Date.now()-7*864e5))&&!(CR.find(c=>c.handle===x.handle)||{}).isMe).sort((a,b)=>b.ratio-a.ratio).slice(0,8);
+  const ins=homeInsights();
+  return `
+  <div class="hhead"><div><h2 class="hello">${greet}, Poonam</h2><p class="sub" style="margin:2px 0 0">Everything at a glance · last ${state.range} days</p></div>
+    <button class="ai-link" data-go="#homeIns" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path></svg>AI Insights</button></div>
+  <div class="cap">Channels</div>
+  <div class="tiles">${on.map(k=>{const d=platData(k);return `<button class="tile" type="button" data-tab="${PLAT[k].tab}">
+    <span class="t-h">${pbadge(k)}${PLAT[k].name}</span><span class="t-v">${d.tile.v}</span><span class="t-l">${d.tile.l}</span><span class="t-d">${d.tile.d||'&nbsp;'}</span></button>`}).join('')}
+    <button class="tile add" type="button" data-tab="channels"><span class="t-h">+ More channels</span><span class="t-l">Website, Google Business, Pinterest, LinkedIn</span></button></div>
+  ${cur?`<section class="hero dk">
+    <div class="h-top"><div class="h-sw"><b>${PLAT[state.hp].name.toUpperCase()}</b>${on.map(k=>`<button type="button" class="h-pk${k===state.hp?' on':''}" data-hp="${k}" aria-label="${PLAT[k].name}" aria-pressed="${k===state.hp}">${pbadge(k)}<i></i></button>`).join('')}</div>
+      <span class="h-rg">${state.range} days</span></div>
+    <div class="h-row">${cur.row1.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div><div class="h-d">${s[2]||'&nbsp;'}</div></div>`).join('')}</div>
+    <div class="h-row">${cur.row2.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div></div>`).join('')}</div>
+    <div class="h-ch"><span>${cur.chart.toUpperCase()}</span><span class="h-avg">14-day avg ${cur.fmt(avg)}</span></div>
+    <div class="h-bars">${bars.map((v,i)=>`<i style="height:${Math.max(4,Math.round(v/mx*96))}px" class="${i===top?'top':''}" title="${cur.fmt(v)}"></i>`).join('')}</div>
+    <div class="h-ax"><span>${dlabel(days[DAYS-14].d)}</span><span>${dlabel(days[DAYS-1].d)}</span></div>
+    <button class="h-open" type="button" data-tab="${PLAT[state.hp].tab}">Open ${PLAT[state.hp].name} →</button>
+  </section>`:''}
+  <div class="cap row"><span>Scripts to shoot</span><button class="linkbtn" type="button" data-tab="scripts">See all</button></div>
+  ${todo.length?`<div class="list">${todo.map(x=>`<button class="li" type="button" data-tab="scripts"><span class="li-t"><b>${esc(x.title)}</b><span class="stype" style="--c:${(STYPE[x.type]||{}).c||'var(--accent)'}">${esc((STYPE[x.type]||{}).n||x.type)}</span></span>
+    <span class="li-s">${esc(x.id)} · post ${esc(sdate(x.post_on))} · ${esc(x.owner)} · ${esc(x.status)}</span></button>`).join('')}</div>`:`<div class="list"><div class="li">${empty('All scripts are posted. Ask for new ones.')}</div></div>`}
+  ${vir.length?`<div class="cap row"><span>Viral this week · competition</span><button class="linkbtn" type="button" data-tab="competition">See all</button></div>
+  <div class="vrow">${vir.map(p=>{const c=CR.find(c=>c.handle===p.handle)||{};return `<a class="vc" href="${esc(p.link)}" target="_blank" rel="noopener"><span class="vc-img">${thumb({thumb:p.thumb,format:p.kind})}<span class="vc-b">${p.ratio}× usual</span></span>
+    <span class="vc-t"><b>@${esc(p.handle)}</b><span>${esc(p.kind)} · ${p.date?dlabel(toDate(p.date)):''}</span></span></a>`}).join('')}</div>`:''}
+  <div class="cap" id="homeIns">AI insights</div>
+  <section class="panel">${ins.length?`<ul class="insights">${ins.map(x=>`<li><span class="ic ${x[0]}">${x[0]==='g'?'↑':x[0]==='w'?'!':'i'}</span><span>${x[1]}</span></li>`).join('')}</ul>`:empty('Not enough data yet.')}</section>`;
+}
+function afterHome(){
+  document.querySelectorAll('[data-hp]').forEach(b=>b.addEventListener('click',()=>{state.hp=b.dataset.hp;save();render()}));
+  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const t=$(b.dataset.go);if(t)t.scrollIntoView({behavior:'smooth'})}));
+}
+
+function channelsView(){
+  const on=ON(), total=on.length+PEND.length+(WEB_ON?0:1);
+  const rows=k=>{const d=platData(k);return d.row1.slice(0,2).map(s=>`<span class="c-r"><span>${s[0]}</span><b>${s[1]}</b></span>`).join('')};
+  return `<div class="hhead"><div><h2 class="hello">Channels</h2><p class="sub" style="margin:2px 0 0">${total} sources · ${on.length} connected</p></div></div>
+  <div class="cgrid">
+    ${on.map(k=>`<button class="cc dk" type="button" data-tab="${PLAT[k].tab}"><span class="c-h">${pbadge(k)}<b>${PLAT[k].name}</b><i class="st on"></i></span>${rows(k)}</button>`).join('')}
+    ${WEB_ON?'':`<button class="cc" type="button" data-tab="website"><span class="c-h"><span class="pbadge" style="background:#6D28D9">W</span><b>Website</b><i class="st off"></i></span><span class="c-note">Not connected yet · tap to see how</span></button>`}
+    ${PEND.map(x=>`<div class="cc"><span class="c-h"><span class="pbadge" style="background:${x[3]}">${x[2]}</span><b>${x[1]}</b><i class="st ${x[5]}"></i></span><span class="c-note">${x[4]}</span></div>`).join('')}
+  </div>
+  <div class="c-legend"><span><i class="st on"></i>Connected</span><span><i class="st pend"></i>Waiting for approval</span><span><i class="st off"></i>Not connected</span></div>
+  <div class="cap">More</div>
+  <div class="list">
+    <button class="li" type="button" data-tab="posts"><span class="li-t"><b>All posts</b></span><span class="li-s">Every Instagram and Facebook post, sortable</span></button>
+    <button class="li" type="button" data-tab="audience"><span class="li-t"><b>Audience</b></span><span class="li-s">Who follows you and when they are online</span></button>
+  </div>`;
+}
+
+function websiteView(){
+  if(!WEB_ON) return `<section class="panel"><h2>Website analytics</h2><p class="sub">Visitors, pages and where they come from (Google Analytics)</p>
+    <p style="margin:0 0 8px">Not connected yet. When you have a minute:</p>
+    <ol class="steps"><li>Open the Google Sheet → <b>Digital Poonam → Website → Connect Google Analytics</b>.</li>
+    <li>Sign in with <b>the Google account that owns the website's Analytics</b> and click Allow.</li>
+    <li>Pick your website from the list. Data appears after the next sync.</li></ol></section>`;
+  const R=state.range,a=webDaysArr(),cc=a.slice(DAYS-R),pp=a.slice(DAYS-2*R,DAYS-R),col='#6D28D9';
+  const tp=(WEB.pages||[]).slice(0,10),src=(WEB.sources||[]).slice(0,8),smax=Math.max(1,...src.map(s=>+s.users||0));
+  return `<div class="grid kpis k4">
+    ${kpi('Visitors',S(cc,'users'),S(pp,'users'),compact,cc.map(r=>r.users),col)}
+    ${kpi('Sessions',S(cc,'sessions'),S(pp,'sessions'),compact,cc.map(r=>r.sessions),col)}
+    ${kpi('Page views',S(cc,'views'),S(pp,'views'),compact,cc.map(r=>r.views),col)}
+    ${kpi('Engaged sessions',S(cc,'engaged'),S(pp,'engaged'),compact,cc.map(r=>r.engaged),col)}
+  </div>
+  <div class="grid two" style="margin-top:16px">
+    <section class="panel"><h2>Top pages</h2><p class="sub">Last ${WEB.window||30} days</p>${tp.length?`<div class="tbl-wrap"><table><thead><tr><th>Page</th><th>Views</th><th>Visitors</th></tr></thead><tbody>${tp.map(r=>`<tr><td class="post-title">${esc(r.title||r.path)}<br><span class="sub" style="margin:0">${esc(r.path)}</span></td><td>${num(+r.views||0)}</td><td>${num(+r.users||0)}</td></tr>`).join('')}</tbody></table></div>`:empty('No pages yet.')}</section>
+    <section class="panel"><h2>Where visitors come from</h2><p class="sub">Last ${WEB.window||30} days</p>${src.length?`<div class="hbars">${src.map(s=>`<div class="hb"><span>${esc(s.source)}</span><div class="track"><div class="fill" style="width:${(+s.users||0)/smax*100}%;background:${col}"></div></div><span class="n">${num(+s.users||0)}</span></div>`).join('')}</div>`:empty('No data yet.')}</section>
+  </div>`;
+}
+
 (function header(){
   const L=DATA.lastSync, n=dates.length;
   const when=L&&L.time?new Date(L.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):null;
@@ -877,16 +995,21 @@ function closeTeleprompter(){if(!TP)return;const {el,tp}=TP;tp.run=false;clearIn
     ? `<span aria-hidden="true">●</span><span><b>Live data.</b> ${n} days synced from Meta${when?`, last sync ${esc(when)}`:''}. Updates automatically every morning.${L&&L.detail&&L.detail!=='OK'?` <span style="color:var(--ink-2)">Notes: ${esc(L.detail)}</span>`:''}</span>`
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
-const views={overview:[overview,afterOverview],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
+const views={home:[home,afterHome],channels:[channelsView,()=>{}],website:[websiteView,()=>{}],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
   ads:[ads,afterAds],youtube:[youtube,afterYoutube],scripts:[scriptsView,afterScripts],competition:[competition,afterCompetition],posts:[postsView,bindSort],audience:[audience,afterAudience]};
-if(!views[state.tab]) state.tab='overview';
+if(!views[state.tab]) state.tab='home';
 function render(){
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===state.tab));
   document.querySelectorAll('#range button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.d===state.range));
   const c=slice(state.range);
   $('#rangeLabel').textContent=dlabel(c[0].d)+' – '+dlabel(c[c.length-1].d)+' '+c[c.length-1].d.getFullYear();
   const [html,after]=views[state.tab];$('#view').innerHTML=html();after();
+  document.querySelectorAll('#bnav button').forEach(x=>x.setAttribute('aria-current',x.dataset.tab===state.tab?'page':'false'));
+  const plat={instagram:'Instagram',facebook:'Facebook',ads:'Meta Ads',youtube:'YouTube',website:'Website',posts:'All posts',audience:'Audience'}[state.tab];
+  $('#backRow').hidden=!plat; $('#backTitle').textContent=plat||'';
 }
+const goTab=t=>{if(!views[t])return;state.tab=t;save();render();window.scrollTo({top:0,behavior:'smooth'})};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b||b.classList.contains('tab'))return;e.preventDefault();goTab(b.dataset.tab)});
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;state.tab=b.dataset.tab;save();render()});
 $('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.range=+b.dataset.d;save();render()});
 let rt,lastW=innerWidth;addEventListener('resize',()=>{if(Math.abs(innerWidth-lastW)<2)return;lastW=innerWidth;clearTimeout(rt);rt=setTimeout(render,150)}); // only redraw when the width really changes

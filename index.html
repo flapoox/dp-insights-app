@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DP Insights</title>
-<meta name="app-version" content="2.5">
+<meta name="app-version" content="2.6">
 <meta name="theme-color" content="#6b2d8f">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,8 +13,8 @@
 <style>
 :root{
   color-scheme:light;
-  --bg:#f6f5f2; --surface:#fdfdfc; --surface-2:#f0eee9; --ink:#15151a; --ink-2:#55545c; --muted:#8a8891;
-  --line:#e3e1db; --axis:#c6c3ba; --accent:#6b2d8f; --accent-soft:#efe6f5; --accent-ink:#ffffff;
+  --bg:#f4f3f7; --surface:#ffffff; --surface-2:#efedf3; --ink:#15151a; --ink-2:#55545c; --muted:#8a8891;
+  --line:#e6e4ec; --axis:#c9c6d1; --accent:#6b2d8f; --accent-soft:#efe6f5; --accent-ink:#ffffff;
   --fb:#2a78d6; --ig:#eb6834; --ads:#1baf7a; --yt:#d4271f; --yt2:#1f8a8a; --good:#0a7a0a; --bad:#c23434; --warn:#b07400;
   --seq-0:#eef4fc; --seq-1:#cde2fb; --seq-2:#9ec5f4; --seq-3:#5598e7; --seq-4:#256abf; --seq-5:#104281;
   --shadow:0 1px 2px rgba(20,20,30,.05),0 4px 16px rgba(20,20,30,.04);
@@ -249,6 +249,101 @@ tr.me td{background:var(--accent-soft)}
 td.rs a{display:inline-block;margin-right:10px;white-space:nowrap}
 .clist{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
 
+/* ---------- New look: Home, Channels, bottom bar ---------- */
+:root{--plum:#2e1f34;--plum-2:#3a2b40;--plum-ink:#b9b3c2;--tile:#2b1e30}
+.panel,.kpi{border-radius:18px}
+.hhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:4px 0 6px}
+.hello{font:700 26px/1.15 var(--display)}
+.ai-link{display:inline-flex;align-items:center;gap:6px;border:0;background:none;color:#2f6feb;font-weight:600;font-size:14px;padding:10px 4px;min-height:44px}
+.cap{font:600 12px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+.cap.row{display:flex;justify-content:space-between;align-items:center}
+.linkbtn{border:0;background:none;color:#2f6feb;font:600 13px var(--body);letter-spacing:0;text-transform:none;padding:8px 2px}
+.pbadge{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font:700 10px var(--body);color:#fff;flex:none}
+.tiles{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.tiles::-webkit-scrollbar{display:none}
+.tile{border:0;text-align:left;background:var(--tile);color:#fff;border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:4px;min-height:132px}
+.tile:hover{filter:brightness(1.12)}
+.t-h{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.t-v{font:800 26px/1.1 var(--display);margin-top:6px}
+.t-l{font-size:12px;color:var(--plum-ink)}
+.t-d{font-size:13px;font-weight:600}
+.tile.add{background:var(--surface);color:var(--ink);border:1.5px dashed var(--axis)}
+.tile.add .t-l{color:var(--ink-2)}
+.dk .up{color:#6ee7a0}.dk .down{color:#ff8f8f}.dk .flat{color:var(--plum-ink)}
+.tile .up{color:#6ee7a0}.tile .down{color:#ff8f8f}
+.hero{margin-top:16px;background:var(--plum);color:#fff;border-radius:26px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:14px}
+.h-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.h-sw{display:flex;align-items:center;gap:6px}
+.h-sw b{font-size:13px;letter-spacing:.1em;margin-right:6px}
+.h-pk{border:0;background:none;padding:0 3px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;opacity:.5}
+.h-pk.on{opacity:1}
+.h-pk i{width:4px;height:4px;border-radius:50%;background:transparent}
+.h-pk.on i{background:#fff}
+.h-rg{font-size:13px;font-weight:600}
+.h-row{background:var(--plum-2);border-radius:18px;padding:14px 16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.h-k{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--plum-ink)}
+.h-v{font:800 24px/1.2 var(--display)}
+.h-d{font-size:12px;font-weight:600}
+.h-ch{display:flex;justify-content:space-between;font-size:12px;font-weight:600;letter-spacing:.08em}
+.h-avg{color:var(--plum-ink);font-weight:500;letter-spacing:0}
+.h-bars{height:100px;display:flex;align-items:flex-end;gap:5px}
+.h-bars i{flex:1;background:#5a4862;border-radius:5px}
+.h-bars i.top{background:#fff}
+.h-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--plum-ink);margin-top:-6px}
+.h-open{border:0;border-radius:14px;background:#fff;color:var(--plum);font-weight:700;font-size:14px;min-height:46px}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden;display:flex;flex-direction:column}
+.li{border:0;border-bottom:1px solid var(--line);background:none;text-align:left;padding:14px 16px;display:flex;flex-direction:column;gap:4px;width:100%}
+.li:last-child{border-bottom:0}
+.li:hover{background:var(--surface-2)}
+.li-t{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:15px}
+.li-s{font-size:13px;color:var(--ink-2)}
+.stype{flex:none;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.vrow{display:grid;grid-auto-flow:column;grid-auto-columns:140px;gap:10px;overflow-x:auto;scrollbar-width:none}
+.vrow::-webkit-scrollbar{display:none}
+.vc{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;color:inherit;text-decoration:none;display:flex;flex-direction:column}
+.vc-img{position:relative;aspect-ratio:4/5;background:var(--surface-2);overflow:hidden;display:block}
+.vc-img .th{width:100%;height:100%;object-fit:cover}
+.vc-b{position:absolute;top:8px;left:8px;background:#d92d20;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.vc-t{padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.vc-t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vc-t span{color:var(--ink-2)}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:10px;margin-top:14px}
+.cc{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:14px 16px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:104px}
+.cc.dk{background:var(--tile);border-color:var(--tile);color:#fff}
+button.cc:hover{filter:brightness(1.08)}
+.c-h{display:flex;align-items:center;gap:8px;font-size:15px}
+.c-h b{flex:1}
+.c-r{display:flex;justify-content:space-between;font-size:13px}
+.cc.dk .c-r span{color:var(--plum-ink)}
+.c-note{font-size:13px;color:var(--ink-2)}
+.st{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.st.on{background:#22c55e}.st.pend{background:#f59e0b}.st.off{background:#9a98a2}
+.c-legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--ink-2);margin-top:14px}
+.c-legend span{display:inline-flex;align-items:center;gap:6px}
+.backrow{display:none;align-items:center;gap:10px;margin:0 0 10px}
+.backbtn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;min-height:40px;font-weight:600}
+#backTitle{font:700 20px var(--display)}
+.bnav{display:none}
+@media (max-width:640px){
+  body{padding-bottom:110px}
+  .bar .tabs{display:none}
+  .bar{justify-content:flex-end;border-bottom:0;padding-block:4px;margin-bottom:8px}
+  .backrow:not([hidden]){display:flex}
+  .bnav{display:flex;position:fixed;left:14px;right:14px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:40;height:68px;border-radius:26px;background:#2a1b30;box-shadow:0 10px 30px rgba(20,10,30,.28);justify-content:space-around;align-items:center}
+  .bnav button{border:0;background:none;color:#a69eb0;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:500;min-width:64px;min-height:56px;justify-content:center}
+  .bnav button[aria-current="page"]{color:#fff;font-weight:600}
+  .hello{font-size:24px}
+  .h-v{font-size:20px}
+  .h-row{padding:12px}
+  .footer{display:none}
+  .cgrid{grid-template-columns:1fr 1fr}
+  .cc{padding:12px 14px;min-height:96px;border-radius:18px}
+  .c-h{font-size:14px}.c-r{font-size:12.5px}
+  .conns,.brand p,.range-label{display:none}
+  .top{padding-block:14px 8px}
+  .sample-note{font-size:12px;padding:8px 12px;margin-bottom:8px}
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--tile:#241a29;--plum:#261a2b;--plum-2:#33253a}}
+
 .mark.logo{background:#fff;padding:3px;object-fit:contain;box-shadow:inset 0 0 0 1px var(--line)}
 .appbar{display:flex;gap:8px;align-items:center}
 .iconbtn{font:500 12.5px var(--body);color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
@@ -287,6 +382,7 @@ body{padding-top:env(safe-area-inset-top)}
 #updBar button{font:600 13.5px var(--body);border:0;border-radius:10px;padding:9px 14px;cursor:pointer}
 #updBar .u-go{background:var(--accent);color:var(--accent-ink)}
 #updBar .u-later{background:transparent;color:var(--bg);opacity:.7;padding:9px 6px}
+@media (max-width:640px){#updBar{bottom:calc(92px + env(safe-area-inset-bottom))}}
 </style></head><body>
 <div class="wrap">
   <header class="top">
@@ -304,11 +400,13 @@ body{padding-top:env(safe-area-inset-top)}
 
   <div class="bar">
     <div class="tabs" role="tablist" id="tabs">
-      <button class="tab" role="tab" data-tab="overview" aria-selected="true" id="t-overview">Overview</button>
+      <button class="tab" role="tab" data-tab="home" aria-selected="true" id="t-home">Home</button>
+      <button class="tab" role="tab" data-tab="channels" aria-selected="false" id="t-channels">Channels</button>
       <button class="tab" role="tab" data-tab="instagram" aria-selected="false" id="t-instagram">Instagram</button>
       <button class="tab" role="tab" data-tab="facebook" aria-selected="false" id="t-facebook">Facebook</button>
       <button class="tab" role="tab" data-tab="ads" aria-selected="false" id="t-ads">Meta Ads</button>
       <button class="tab" role="tab" data-tab="youtube" aria-selected="false" id="t-youtube">YouTube</button>
+      <button class="tab" role="tab" data-tab="website" aria-selected="false" id="t-website">Website</button>
       <button class="tab" role="tab" data-tab="scripts" aria-selected="false" id="t-scripts">Scripts</button>
       <button class="tab" role="tab" data-tab="competition" aria-selected="false" id="t-competition">Competition</button>
       <button class="tab" role="tab" data-tab="posts" aria-selected="false" id="t-posts">Posts</button>
@@ -324,10 +422,17 @@ body{padding-top:env(safe-area-inset-top)}
     </div>
   </div>
 
+  <div class="backrow" id="backRow" hidden><button type="button" class="backbtn" data-tab="channels">← Channels</button><span id="backTitle"></span></div>
   <main id="view"></main>
   <p class="footer">Periods compare against the previous period of equal length. Ad spend in ₹ as reported by Meta. "—" means Meta has not returned that metric for this account.</p>
 </div>
 
+<nav class="bnav" id="bnav" aria-label="Main">
+  <button type="button" data-tab="home"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9h-6v-5H9v5H3z"></path></svg>Home</button>
+  <button type="button" data-tab="channels"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 20v-6M12 20V8M18 20V4"></path></svg>Channels</button>
+  <button type="button" data-tab="scripts"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"></path><path d="M9 11h6M9 15h6"></path></svg>Scripts</button>
+  <button type="button" data-tab="competition"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 4"></path></svg>Competition</button>
+</nav>
 <dialog id="actDlg" aria-label="Confirm change"></dialog>
 <script>window.addEventListener('error',function(e){var n=document.getElementById('syncNote');if(n){n.style.background='#fde8e8';n.textContent='Page error: '+(e.message||'')+' (line '+(e.lineno||'?')+')';}});</script>
 <div id="gate" hidden>

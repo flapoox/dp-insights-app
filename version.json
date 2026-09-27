@@ -1,9 +1,11 @@
 {
-  "version": "2.5",
+  "version": "2.6",
   "date": "2026-09-27",
   "notes": [
-    "Competition tab: your 9 creators, viral posts and a copy-brief button",
-    "New scripts are now added every week automatically from what's going viral",
-    "Scripts list is sorted by posting date"
+    "New look: Home with all channels at a glance",
+    "Tap IG / Ad / FB / YT in the big card to switch platform",
+    "New Channels screen: connected, waiting for approval, not connected",
+    "Bottom bar on phone: Home, Channels, Scripts, Competition",
+    "Website box added (connect Google Analytics anytime)"
   ]
 }
