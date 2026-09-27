@@ -1,5 +1,5 @@
 // Keeps the app shell available offline. Data is never cached here (it is fetched by POST).
-const CACHE = 'dp-insights-v2';
+const CACHE = 'dp-insights-v3';
 const SHELL = ['./', 'index.html', 'app.js', 'boot.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
@@ -8,7 +8,7 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.endsWith('version.json')) return;
   // Network first, so updates show up straight away; fall back to the saved copy when offline.
   e.respondWith(fetch(e.request).then(r => {
     const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r;

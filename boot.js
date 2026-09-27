@@ -93,6 +93,39 @@
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 
+  /* ---- "Update available" pop-up, like store apps ----
+     The site publishes version.json. If it is newer than the version this screen was loaded with,
+     show a banner; "Update" clears the offline copy and reloads the newest version. */
+  var CURRENT = (document.querySelector('meta[name="app-version"]') || {}).content || '0';
+  function newer(a, b) { var x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+    for (var i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; }
+  function checkForUpdate() {
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+      if (!v || !newer(v.version, CURRENT)) return;
+      if (get('dp-skip-version') === v.version) return;
+      document.getElementById('updTitle').textContent = 'Update available · v' + v.version;
+      document.getElementById('updSub').textContent = "What's new:";
+      document.getElementById('updNotes').innerHTML = (v.notes || []).slice(0, 5).map(function (n) {
+        return '<li>' + String(n).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }) + '</li>'; }).join('');
+      document.getElementById('updBar').hidden = false;
+    }).catch(function () {});
+  }
+  document.getElementById('updGo').addEventListener('click', function () {
+    var btn = this; btn.textContent = 'Updating…'; btn.disabled = true;
+    var done = function () { location.reload(); };
+    Promise.all([
+      window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null,
+      navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.update(); })); }) : null
+    ]).then(done, done);
+  });
+  document.getElementById('updLater').addEventListener('click', function () {
+    document.getElementById('updBar').hidden = true;   // asks again next time the app opens
+  });
+  setTimeout(function () { var f = document.querySelector('.footer'); if (f && f.textContent.indexOf('App v') < 0) f.insertAdjacentHTML('beforeend', ' · App v' + CURRENT); }, 1500);
+  setTimeout(checkForUpdate, 3000);
+  setInterval(checkForUpdate, 30 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkForUpdate(); });
+
   var pin = get(K_PIN);
   if (!API || API.indexOf('__') === 0) return showGate('App is not connected yet.', true);
   if (pin) load(pin, false); else showGate();
