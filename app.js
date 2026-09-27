@@ -679,7 +679,7 @@ function afterYoutube(){
 /* ---------- Scripts + teleprompter ---------- */
 const STYPE={FACE:{n:'Face shoot',ic:'📸',c:'var(--ig)'},CLONE:{n:'AI clone',ic:'🤖',c:'var(--accent)'},ANIMATION:{n:'Animation',ic:'🎞️',c:'var(--yt)'},FACELESS:{n:'Faceless',ic:'🎧',c:'var(--ads)'}};
 const SSTAT=['To do','Shot','Edited','Posted'];
-const SC=(DATA.scripts||[]).slice().sort((a,b)=>(+a.priority||99)-(+b.priority||99));
+const SC=(DATA.scripts||[]).slice().sort((a,b)=>String(a.post_on||'9').localeCompare(String(b.post_on||'9'))||(+a.priority||99)-(+b.priority||99));
 if(!state.sf) state.sf='ALL'; if(!state.ss) state.ss='open';
 const sdate=s=>{const d=toDate(String(s||'').slice(0,10));return isNaN(d)?'':dlabel(d)};
 function scriptText(x){const T=STYPE[x.type]||{n:x.type};

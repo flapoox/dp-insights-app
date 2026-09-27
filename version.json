@@ -1,10 +1,9 @@
 {
-  "version": "2.4",
+  "version": "2.5",
   "date": "2026-09-27",
   "notes": [
-    "New Competition tab: your 9 creators side by side with followers, growth and engagement",
-    "Viral this week: their posts that did 2x or more than usual",
-    "Copy a ready brief for your editor from any viral post",
-    "One-tap links to see the ads they are running (Meta Ad Library)"
+    "Competition tab: your 9 creators, viral posts and a copy-brief button",
+    "New scripts are now added every week automatically from what's going viral",
+    "Scripts list is sorted by posting date"
   ]
 }
