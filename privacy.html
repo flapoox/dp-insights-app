@@ -7,9 +7,16 @@
 <p>Last updated: 27 September 2026</p>
 <p>DP Insights is a private reporting tool run by Digital Poonam (Raipur, Chhattisgarh, India) for its own social media and YouTube accounts. It is not offered to the public.</p>
 <h2>What we access</h2>
-<p>When an account owner connects a YouTube channel, DP Insights asks Google for read-only access (<code>youtube.readonly</code> and <code>yt-analytics.readonly</code>). It reads channel statistics, video details and YouTube Analytics reports such as views, watch time, subscribers and traffic sources.</p>
+<p>When an account owner connects an account, DP Insights asks only for read-only reporting access:</p>
+<ul>
+<li><b>YouTube</b> (<code>youtube.readonly</code>, <code>yt-analytics.readonly</code>): channel statistics, video details and YouTube Analytics reports.</li>
+<li><b>Pinterest</b> (<code>user_accounts:read</code>, <code>pins:read</code>, <code>boards:read</code>): account analytics such as impressions, saves, pin clicks and outbound clicks, and the account's own Pins and boards.</li>
+<li><b>LinkedIn</b> (post analytics for the member's own posts and our own Company Page): impressions, reach, reactions, comments and reposts.</li>
+<li><b>Google Business Profile</b>: performance insights and reviews for Business Profiles we own.</li>
+<li><b>Facebook and Instagram</b>: insights for our own Page, Instagram account and ad account.</li>
+</ul>
 <h2>How we use it</h2>
-<p>The data is used only to show performance charts and suggestions to the account owner in the DP Insights dashboard. It is never sold, shared with third parties or used for advertising. DP Insights cannot upload, edit or delete anything on YouTube.</p>
+<p>The data is used only to show performance charts and suggestions to the account owner in the DP Insights dashboard. It is never sold, shared with third parties or used for advertising. DP Insights does not post, upload, edit or delete content on Pinterest, YouTube, LinkedIn or Google Business Profile.</p>
 <h2>Where it is stored</h2>
 <p>Report data is stored in the owner's private Google Sheet. Sign-in keys are stored privately inside the owner's Google Apps Script project and are not shown in the Sheet.</p>
 <h2>Removing access</h2>
