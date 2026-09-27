@@ -61,7 +61,7 @@
     fetchData(pin).then(function (res) {
       if (res && res.ok) {
         set(K_PIN, pin);
-        var fresh = lastSync(res.data) !== lastSync(cached);
+        var fresh = JSON.stringify(res.data) !== JSON.stringify(cached); // any change (new tab data, new sync) redraws the screen
         set(K_DATA, JSON.stringify(res.data));
         if (!started) run(res.data);
         else if (fresh) location.reload();
