@@ -26,8 +26,8 @@ for(let i=DAYS-1;i>=0;i--){ const d=new Date(END); d.setDate(END.getDate()-i);
   const src = byDate[ymd(d)]||{}; const o={d};
   KEYS.forEach(k=>{ const v=src[k]; o[k] = (v===null||v===undefined||v==='')?null:Number(v); }); days.push(o); }
 
-const state={tab:'overview',range:30};
-try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range}catch(e){}
+const state={tab:'overview',range:30,yt:'all'};
+try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt}catch(e){}
 const save=()=>{try{localStorage.setItem('dpi-live',JSON.stringify(state))}catch(e){}};
 
 function slice(n,offset=0){return days.slice(DAYS-n*(offset+1),DAYS-n*offset)}
@@ -549,17 +549,143 @@ function afterAudience(){
   heat.addEventListener('pointerleave',()=>tip.hidden=true);
 }
 
+/* ---------- YouTube ---------- */
+const YT=DATA.yt||{};
+const Nn=v=>v==null||v===''||isNaN(+v)?null:+v;
+const YCH=(YT.channels||[]).map((c,i)=>({...c,color:i%2?'var(--yt2)':'var(--yt)',colorName:i%2?'--yt2':'--yt'}));
+if(!state.yt||(state.yt!=='all'&&!YCH.some(c=>c.channel_id===state.yt))) state.yt='all';
+const ytSel=()=>state.yt==='all'?YCH.map(c=>c.channel_id):[state.yt];
+const YK=['views','minutes','gained','lost','likes','comments','shares','durW'];
+function ytDays(ids){
+  const rows=(YT.daily||[]).filter(r=>ids.includes(r.channel_id));
+  const by={};let last='';
+  rows.forEach(r=>{const k=String(r.date).slice(0,10);if(k>last)last=k;const o=by[k]=by[k]||{};const v=Nn(r.views)||0;
+    o.views=(o.views||0)+v;o.minutes=(o.minutes||0)+(Nn(r.minutes)||0);o.gained=(o.gained||0)+(Nn(r.subs_gained)||0);o.lost=(o.lost||0)+(Nn(r.subs_lost)||0);
+    o.likes=(o.likes||0)+(Nn(r.likes)||0);o.comments=(o.comments||0)+(Nn(r.comments)||0);o.shares=(o.shares||0)+(Nn(r.shares)||0);o.durW=(o.durW||0)+(Nn(r.avg_view_sec)||0)*v;
+    o['v_'+r.channel_id]=(o['v_'+r.channel_id]||0)+v});
+  if(!last) return {arr:[],end:null};
+  const end=toDate(last),arr=[];
+  for(let i=DAYS-1;i>=0;i--){const d=new Date(end);d.setDate(end.getDate()-i);const s=by[ymd(d)];const o={d};
+    YK.forEach(k=>o[k]=s&&s[k]!=null?s[k]:null);YCH.forEach(c=>o['v_'+c.channel_id]=s?(s['v_'+c.channel_id]||0):null);arr.push(o)}
+  return {arr,end};
+}
+function ytWeeks(rows){const out=[];for(let i=0;i<rows.length;i+=7){const ch=rows.slice(i,i+7);const o={d:ch[0].d};
+  Object.keys(ch[0]).filter(k=>k!=='d').forEach(k=>o[k]=S(ch,k));out.push(o)}return out}
+const FMT_NAMES={SHORTS:'Shorts',VIDEO_ON_DEMAND:'Long videos',LIVE_STREAM:'Live',STORY:'Stories',UNSPECIFIED:'Other'};
+const SRC_NAMES={YT_SEARCH:'YouTube search',SUBSCRIBER:'Subscriber feeds',RELATED_VIDEO:'Suggested videos',SHORTS:'Shorts feed',BROWSE:'Home & browse',EXT_URL:'Outside YouTube (links)',
+  YT_CHANNEL:'Your channel page',PLAYLIST:'Playlists',NOTIFICATION:'Notifications',NO_LINK_OTHER:'Direct / unknown',END_SCREEN:'End screens',YT_OTHER_PAGE:'Other YouTube pages',
+  ADVERTISING:'YouTube ads',HASHTAGS:'Hashtag pages',SOUND_PAGE:'Sound pages',ANNOTATION:'Cards',CAMPAIGN_CARD:'Campaign cards',YT_PLAYLIST_PAGE:'Playlist pages',PRODUCT_PAGE:'Product pages',LIVE_REDIRECT:'Live redirects',VIDEO_REMIXES:'Remixes'};
+function ytSplit(kind,win,ids){const m={};(YT.split||[]).filter(r=>r.kind===kind&&String(r.window)===String(win)&&ids.includes(r.channel_id)).forEach(r=>{
+  const k=r.label;m[k]=m[k]||{k,views:0,minutes:0};m[k].views+=Nn(r.views)||0;m[k].minutes+=Nn(r.minutes)||0});return Object.values(m).sort((a,b)=>b.views-a.views)}
+const mmss=s=>{s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const ytWin=()=>state.range===7?7:state.range===90?90:30;
+function ytVideos(ids){return (YT.videos||[]).filter(v=>ids.includes(v.channel_id)).map(v=>{const w=ytWin();
+  return {...v,vw:Nn(v['views_'+w])||0,hrs:(Nn(w===90?v.minutes_90:v.minutes_30)||0)/60,pctv:Nn(v.avg_pct_30),subs:Nn(w===90?v.subs_90:v.subs_30)||0,
+    all:Nn(v.views_all),url:v.type==='Short'?'https://youtube.com/shorts/'+v.video_id:'https://youtu.be/'+v.video_id,ch:YCH.find(c=>c.channel_id===v.channel_id)}})}
+function ytInsights(T,P,ids,vids,fmt,src){
+  const good=[],bad=[],next=[],n=state.range;
+  if(T.views!=null&&P.views){const ch=(T.views-P.views)/P.views*100;
+    if(ch>=10) good.push({t:`Views up ${ch.toFixed(0)}%`,x:`${compact(T.views)} views in the last ${n} days vs ${compact(P.views)} before.`});
+    else if(ch<=-15) bad.push({t:`Views down ${Math.abs(ch).toFixed(0)}%`,x:`${compact(T.views)} views vs ${compact(P.views)} in the previous ${n} days. Check if uploads slowed down.`})}
+  const net=(T.gained||0)-(T.lost||0);
+  if(T.views&&net>0){const per=net/T.views*1000;(per>=3?good:next).push({t:`${per.toFixed(1)} new subscribers per 1,000 views`,x:per>=3?'Viewers like what they see and are subscribing.':'Add a clear "subscribe" ask and an end screen pointing to your best video.'})}
+  if(net<0) bad.push({t:'Losing subscribers',x:`${num(T.lost)} left and ${num(T.gained)} joined. Look at the videos posted just before the drop.`});
+  const inR=vids.filter(v=>v.vw>0).sort((a,b)=>b.vw-a.vw);
+  if(inR[0]) good.push({t:'Best video: '+inR[0].title,x:`${compact(inR[0].vw)} views${inR[0].subs?`, ${num(inR[0].subs)} new subscribers`:''} (${inR[0].type}). Make a follow-up on the same topic.`});
+  const sh=fmt.find(f=>f.k==='SHORTS'),lv=fmt.find(f=>f.k==='VIDEO_ON_DEMAND'),totV=fmt.reduce((s,f)=>s+f.views,0),totM=fmt.reduce((s,f)=>s+f.minutes,0);
+  if(sh&&lv&&totV&&totM){const vs=sh.views/totV*100,ms=sh.minutes/totM*100;
+    next.push({t:`Shorts bring ${vs.toFixed(0)}% of views, ${ms.toFixed(0)}% of watch time`,x:vs>60?'Shorts find new people; turn the best Shorts into longer videos and link them, so viewers stay longer.':'Long videos carry the channel. Cut 2–3 Shorts from each long video to reach new people.'})}
+  const longs=vids.filter(v=>v.type==='Video'&&v.pctv!=null&&v.vw>=50);
+  if(longs.length){const avg=longs.reduce((s,v)=>s+v.pctv,0)/longs.length;
+    (avg>=45?good:bad).push({t:`Long videos are watched ${avg.toFixed(0)}% through on average`,x:avg>=45?'Strong retention. Keep the same pacing.':'Viewers leave early. Get to the point in the first 30 seconds and cut slow parts.'})}
+  const from=ymd(new Date(Date.now()-n*864e5)),ups=vids.filter(v=>String(v.published)>=from);
+  if(!ups.length) next.push({t:`No uploads in the last ${n} days`,x:'Channels grow with a steady rhythm. Aim for at least one video (or 3 Shorts) a week.'});
+  else good.push({t:`${ups.length} upload${ups.length>1?'s':''} in the last ${n} days`,x:`${ups.filter(v=>v.type==='Short').length} Shorts, ${ups.filter(v=>v.type!=='Short').length} videos.`});
+  const tot=src.reduce((s,x)=>s+x.views,0),search=src.find(x=>x.k==='YT_SEARCH');
+  if(tot&&(!search||search.views/tot<0.1)) next.push({t:'Few views from YouTube search',x:`Only ${search?(search.views/tot*100).toFixed(0):0}% come from search. Put the words people type (e.g. "digital marketing course Raipur") in titles, first line of description and tags.`});
+  if(tot&&src[0]) good.push({t:'Top traffic source: '+(SRC_NAMES[src[0].k]||src[0].k),x:`${(src[0].views/tot*100).toFixed(0)}% of views in this period.`});
+  return {good,bad,next};
+}
+function youtube(){
+  if(!YCH.length) return `<section class="panel"><h2>Connect YouTube</h2><p class="sub">No YouTube channel connected yet.</p>
+    <ol class="steps"><li>Open the Google Sheet → <b>Digital Poonam → YouTube → A. Save Google login client</b> (one time).</li>
+    <li>Then <b>B. Connect a YouTube channel</b> and sign in with the Google account that owns the channel.</li>
+    <li>Repeat step 2 for the second channel. Data appears here right after.</li></ol></section>`;
+  const ids=ytSel(),{arr,end}=ytDays(ids),n=state.range;
+  const c=arr.slice(DAYS-n),p=arr.slice(DAYS-2*n,DAYS-n),w=n>30?ytWeeks(c):c;
+  const tot=a=>{const o={};YK.forEach(k=>o[k]=S(a,k));o.avg=o.views?o.durW/o.views:null;o.eng=(o.likes||0)+(o.comments||0)+(o.shares||0);return o};
+  const T=tot(c),P=tot(p);
+  const subs=ids.reduce((s,id)=>{const ch=YCH.find(x=>x.channel_id===id);return s+(Nn(ch&&ch.subs)||0)},0);
+  const vids=ytVideos(ids),fmt=ytSplit('format',ytWin(),ids),src=ytSplit('traffic',ytWin(),ids);
+  const I=ytInsights(T,P,ids,vids,fmt,src);
+  const col=state.yt==='all'?'var(--yt)':(YCH.find(x=>x.channel_id===state.yt)||{}).color;
+  const card=(cls,title,list,emptyMsg)=>`<section class="panel ins ${cls}"><h2>${title}</h2>${list.length?list.map(i=>`<div class="ins-item"><b>${esc(i.t)}</b><p>${esc(i.x)}</p></div>`).join(''):`<p class="sub">${emptyMsg}</p>`}</section>`;
+  const fmtBars=(list,name)=>{const t=list.reduce((s,x)=>s+x.views,0)||1,mx=Math.max(1,...list.map(x=>x.views));
+    return list.length?`<div class="hbars">${list.slice(0,8).map(x=>`<div class="hb"><span>${esc(name[x.k]||x.k)}</span><div class="track"><div class="fill" style="width:${x.views/mx*100}%;background:${col}"></div></div><span class="n">${(x.views/t*100).toFixed(0)}%</span></div>`).join('')}</div>`:empty('Appears after the next sync.')};
+  const top=vids.filter(v=>v.vw>0).sort((a,b)=>b.vw-a.vw);
+  const errs=YCH.filter(x=>ids.includes(x.channel_id)&&String(x.status||'').startsWith('error'));
+  const net=v=>v.gained==null?null:(v.gained||0)-(v.lost||0);
+  return `
+  <div class="ytbar">${YCH.length>1?`<div class="seg" id="ytSeg" aria-label="Channel"><button data-c="all" aria-pressed="${state.yt==='all'}">Both channels</button>${YCH.map(x=>`<button data-c="${esc(x.channel_id)}" aria-pressed="${state.yt===x.channel_id}">${esc(x.title)}</button>`).join('')}</div>`:''}
+    <span class="sub" style="margin:0">${end?`YouTube data up to ${dlabel(end)} (YouTube reports with a 2–3 day delay)`:'Waiting for first sync'}</span></div>
+  ${errs.map(x=>`<p class="note">⚠️ ${esc(x.title)}: ${esc(String(x.status).replace(/^error: /,''))}</p>`).join('')}
+  <div class="ytchs">${YCH.filter(x=>ids.includes(x.channel_id)).map(x=>`<a class="ytch" href="https://youtube.com/channel/${esc(x.channel_id)}" target="_blank" rel="noopener">${x.thumb?`<img src="${esc(x.thumb)}" alt="" referrerpolicy="no-referrer">`:''}<span><b>${esc(x.title)}</b><span class="sub">${Nn(x.subs)!=null?compact(+x.subs)+' subscribers · ':''}${Nn(x.videos)!=null?num(+x.videos)+' videos':''}</span></span></a>`).join('')}</div>
+  <div class="grid kpis k4">
+    ${kpi('Subscribers',subs||null,null,num,[],col)}
+    ${kpi('Net new subscribers',net(T),net(P),num,w.map(r=>(r.gained||0)-(r.lost||0)),col)}
+    ${kpi('Views',T.views,P.views,compact,w.map(r=>r.views),col)}
+    ${kpi('Watch time (hours)',T.minutes!=null?T.minutes/60:null,P.minutes!=null?P.minutes/60:null,compact,w.map(r=>(r.minutes||0)/60),col)}
+    ${kpi('Avg view duration',T.avg,P.avg,mmss,null,col)}
+    ${kpi('Likes',T.likes,P.likes,compact,w.map(r=>r.likes),col)}
+    ${kpi('Comments + shares',T.views!=null?(T.comments||0)+(T.shares||0):null,P.views!=null?(P.comments||0)+(P.shares||0):null,num,w.map(r=>(r.comments||0)+(r.shares||0)),col)}
+    ${kpi('Subs per 1,000 views',T.views?net(T)/T.views*1000:null,P.views?net(P)/P.views*1000:null,v=>v.toFixed(1),null,col)}
+  </div>
+  <div class="grid ins3" style="margin-top:16px">
+    ${card('ins-good','✅ What is going right',I.good,'Nothing stands out yet.')}
+    ${card('ins-bad','⚠️ What is going wrong',I.bad,'No problems found in this period. 👍')}
+    ${card('ins-next','👉 Do this next',I.next,'Nothing pending.')}
+  </div>
+  <div class="grid two" style="margin-top:16px">
+    <section class="panel"><h2>Views</h2><p class="sub">Per ${per()}</p>${state.yt==='all'&&YCH.length>1?`<div class="legend">${YCH.map(x=>`<span><i class="sw" style="background:${x.color}"></i>${esc(x.title)}</span>`).join('')}</div>`:''}<div id="ytViews"></div></section>
+    <section class="panel"><h2>Watch time</h2><p class="sub">Hours per ${per()}</p><div id="ytWatch"></div></section>
+  </div>
+  <div class="grid two" style="margin-top:16px">
+    <section class="panel"><h2>Shorts vs long videos</h2><p class="sub">Share of views, last ${ytWin()} days</p>${fmtBars(fmt,FMT_NAMES)}
+      ${fmt.length?`<p class="sub" style="margin-top:10px">${fmt.map(f=>`${esc(FMT_NAMES[f.k]||f.k)}: ${compact(f.minutes/60)} watch hours`).join(' · ')}</p>`:''}</section>
+    <section class="panel"><h2>Where views come from</h2><p class="sub">Traffic sources, last ${ytWin()} days</p>${fmtBars(src,SRC_NAMES)}</section>
+  </div>
+  <div class="section-title">Top videos · last ${ytWin()} days · click to open</div>
+  ${top.length?`<div class="cards ytcards">${top.slice(0,8).map(v=>`<a class="pcard" href="${esc(v.url)}" target="_blank" rel="noopener">
+    <div class="pc-img">${thumb({thumb:v.thumb,format:v.type})}<span class="pc-badge" style="background:${v.ch?v.ch.color:'var(--yt)'}">${esc(v.type)}${YCH.length>1&&v.ch?' · '+esc(v.ch.title):''}</span></div>
+    <div class="pc-body"><p class="pc-text" style="font-weight:600">${esc(v.title)}</p>
+    <div class="pc-stats"><span><b>${compact(v.vw)}</b> views</span><span><b>${v.hrs?compact(v.hrs):'—'}</b> watch hrs</span><span><b>${v.pctv!=null?pct(v.pctv,0):'—'}</b> watched</span><span><b>${num(v.subs)}</b> subs</span></div>
+    <p class="pc-date">Posted ${v.published?dlabel(toDate(v.published))+' '+toDate(v.published).getFullYear():'—'} · ${v.all!=null?compact(v.all)+' views all-time':''}</p></div></a>`).join('')}</div>`:empty('No video views in this period yet.')}
+  <div class="section-title">Latest uploads</div>
+  <section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Video</th>${YCH.length>1?'<th>Channel</th>':''}<th>Type</th><th>Posted</th><th>Views (${ytWin()}d)</th><th>All-time views</th><th>Likes</th><th>Comments</th><th>% watched</th></tr></thead>
+  <tbody>${vids.slice().sort((a,b)=>String(b.published).localeCompare(String(a.published))).slice(0,30).map(v=>`<tr><td class="post-title"><div class="pt">${thumb({thumb:v.thumb,format:v.type},'sm')}<a href="${esc(v.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(v.title)}</a></div></td>${YCH.length>1?`<td>${esc(v.ch?v.ch.title:'')}</td>`:''}<td><span class="pill">${esc(v.type)}</span></td><td>${v.published?dlabel(toDate(v.published)):'—'}</td><td>${num(v.vw)}</td><td>${v.all!=null?num(v.all):'—'}</td><td>${Nn(v.likes_all)!=null?num(+v.likes_all):'—'}</td><td>${Nn(v.comments_all)!=null?num(+v.comments_all):'—'}</td><td>${v.pctv!=null?pct(v.pctv,0):'—'}</td></tr>`).join('')||`<tr><td colspan="9">${empty('No uploads found.')}</td></tr>`}</tbody></table></div></section>`;
+}
+function afterYoutube(){
+  const seg=$('#ytSeg');if(seg)seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.yt=b.dataset.c;save();render()});
+  if(!YCH.length) return;
+  const ids=ytSel(),{arr}=ytDays(ids),n=state.range,c=arr.slice(DAYS-n),rows=n>30?ytWeeks(c):c;
+  const col=state.yt==='all'?css('--yt'):css((YCH.find(x=>x.channel_id===state.yt)||{colorName:'--yt'}).colorName);
+  if(!has(c,'views')){$('#ytViews').innerHTML=empty('No data for this period yet.');$('#ytWatch').innerHTML=empty('No data for this period yet.');return}
+  const series=state.yt==='all'&&YCH.length>1?YCH.map(x=>({name:x.title,color:css(x.colorName),get:r=>r['v_'+x.channel_id]||0})):[{name:'Views',color:col,get:r=>r.views||0}];
+  lineChart($('#ytViews'),rows,series,num,{label:'YouTube views'});
+  barChart($('#ytWatch'),rows,r=>(r.minutes||0)/60,col,v=>compact(v)+' h',{name:'Watch hours',label:'Watch time'});
+}
+
 /* ---------- header + render ---------- */
 (function header(){
   const L=DATA.lastSync, n=dates.length;
   const when=L&&L.time?new Date(L.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):null;
-  $('#conns').innerHTML=[['--fb','Facebook Page'],['--ig','Instagram'],['--ads','Ad account']].map(x=>`<span class="conn"><span class="dot" style="background:var(${x[0]})"></span>${x[1]}</span>`).join('');
+  $('#conns').innerHTML=[['--fb','Facebook Page'],['--ig','Instagram'],['--ads','Ad account']].concat(YCH.map(c=>[c.colorName,c.title])).map(x=>`<span class="conn"><span class="dot" style="background:var(${x[0]})"></span>${x[1]}</span>`).join('');
   $('#syncNote').innerHTML = n
     ? `<span aria-hidden="true">●</span><span><b>Live data.</b> ${n} days synced from Meta${when?`, last sync ${esc(when)}`:''}. Updates automatically every morning.${L&&L.detail&&L.detail!=='OK'?` <span style="color:var(--ink-2)">Notes: ${esc(L.detail)}</span>`:''}</span>`
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
 const views={overview:[overview,afterOverview],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
-  ads:[ads,afterAds],posts:[postsView,bindSort],audience:[audience,afterAudience]};
+  ads:[ads,afterAds],youtube:[youtube,afterYoutube],posts:[postsView,bindSort],audience:[audience,afterAudience]};
 if(!views[state.tab]) state.tab='overview';
 function render(){
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===state.tab));

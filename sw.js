@@ -1,5 +1,5 @@
 // Keeps the app shell available offline. Data is never cached here (it is fetched by POST).
-const CACHE = 'dp-insights-v3';
+const CACHE = 'dp-insights-v4';
 const SHELL = ['./', 'index.html', 'app.js', 'boot.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

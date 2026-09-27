@@ -1,11 +1,10 @@
 {
-  "version": "2.1",
+  "version": "2.2",
   "date": "2026-09-27",
   "notes": [
-    "Meta Ads: what is going right / wrong / do this next",
-    "ROAS and estimated ROAS for lead ads",
-    "Ad previews with Pause / Resume and budget buttons",
-    "Boost a post (created paused)",
-    "Update pop-up like other apps"
+    "New YouTube tab: both channels together or one at a time",
+    "Views, watch time, subscribers, Shorts vs long videos",
+    "Where views come from + top videos with thumbnails",
+    "YouTube suggestions: going right / wrong / do this next"
   ]
 }
