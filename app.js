@@ -273,7 +273,7 @@ function adRows(win){return (DATA.adStats||[]).filter(r=>String(r.window)===Stri
 function roll(rows){const t={spend:0,impressions:0,link_clicks:0,results:0,value:0,purchases:0,leads:0,freqW:0,byType:{}};
   rows.forEach(r=>{t.spend+=r.spend;t.impressions+=r.impressions;t.link_clicks+=r.link_clicks;t.value+=r.value;t.purchases+=r.purchases;t.leads+=r.leads;t.freqW+=r.frequency*r.impressions;
     const b=t.byType[r.result_type]=t.byType[r.result_type]||{spend:0,n:0};b.spend+=r.spend;b.n+=r.results;});
-  const main=Object.entries(t.byType).sort((a,b)=>b[1].spend-a[1].spend)[0];
+  const main=Object.entries(t.byType).sort((a,b)=>((b[1].n>0)-(a[1].n>0))||b[1].spend-a[1].spend)[0]; // prefer a result type that actually has results
   t.type=main?main[0]:'Results';t.results=main?main[1].n:0;t.typeSpend=main?main[1].spend:0;
   t.cpr=t.results?t.typeSpend/t.results:null;t.ctr=t.impressions?t.link_clicks/t.impressions*100:null;
   t.cpm=t.impressions?t.spend/t.impressions*1000:null;t.cpc=t.link_clicks?t.spend/t.link_clicks:null;t.freq=t.impressions?t.freqW/t.impressions:null;
@@ -335,7 +335,7 @@ function adInsights(M){
       good.push({t:`Winner: ${c.name}`,x:`${num(c.results)} ${c.type.toLowerCase()} at ${inr2(c.cpr)} each, ${Math.round((1-c.cpr/avg)*100)}% cheaper than average. Give it more budget.`,a});
     } else if(!c.results&&c.type!=='People reached'&&c.spend>=Math.max(500,(avg||0)*2)){
       const a=[];if(on) a.push(btn('Pause campaign',{action:'status',id:c.id,name:c.name,status:'PAUSED',level:'campaign'},'a-bad'));
-      bad.push({t:`No results: ${c.name}`,x:`Spent ${inr(c.spend)} with zero ${c.type.toLowerCase()}. Pause it, or check the form/landing page is working.`,a});
+      bad.push({t:`No results: ${c.name}`,x:`Spent ${inr(c.spend)} with zero ${c.type.toLowerCase()}. `+(c.type==='Purchases'?'Either nobody bought, or the website pixel is not reporting purchases to Meta. Check the pixel before spending more.':'Pause it, or check the form/landing page is working.'),a});
     } else if(avg&&c.cpr>=avg*1.5){
       const a=[];if(on&&b) a.push(btn(`Cut −20% (₹${num(b.v)} → ₹${num(Math.round(b.v*0.8))})`,{action:'budget',id:b.id,name:c.name,from:b.v,budget:Math.round(b.v*0.8),level:b.level},'a-bad'));
       if(on) a.push(btn('Pause',{action:'status',id:c.id,name:c.name,status:'PAUSED',level:'campaign'},'a-ghost'));
@@ -570,6 +570,6 @@ function render(){
 }
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;state.tab=b.dataset.tab;save();render()});
 $('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.range=+b.dataset.d;save();render()});
-let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,150)});
+let rt,lastW=innerWidth;addEventListener('resize',()=>{if(Math.abs(innerWidth-lastW)<2)return;lastW=innerWidth;clearTimeout(rt);rt=setTimeout(render,150)}); // only redraw when the width really changes
 render();
 })();
