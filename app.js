@@ -577,6 +577,7 @@ const SRC_NAMES={YT_SEARCH:'YouTube search',SUBSCRIBER:'Subscriber feeds',RELATE
   ADVERTISING:'YouTube ads',HASHTAGS:'Hashtag pages',SOUND_PAGE:'Sound pages',ANNOTATION:'Cards',CAMPAIGN_CARD:'Campaign cards',YT_PLAYLIST_PAGE:'Playlist pages',PRODUCT_PAGE:'Product pages',LIVE_REDIRECT:'Live redirects',VIDEO_REMIXES:'Remixes'};
 function ytSplit(kind,win,ids){const m={};(YT.split||[]).filter(r=>r.kind===kind&&String(r.window)===String(win)&&ids.includes(r.channel_id)).forEach(r=>{
   const k=r.label;m[k]=m[k]||{k,views:0,minutes:0};m[k].views+=Nn(r.views)||0;m[k].minutes+=Nn(r.minutes)||0});return Object.values(m).sort((a,b)=>b.views-a.views)}
+const YT_CH='https:'+'/'+'/youtube.com/channel/';
 const mmss=s=>{s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const ytWin=()=>state.range===7?7:state.range===90?90:30;
 function ytVideos(ids){return (YT.videos||[]).filter(v=>ids.includes(v.channel_id)).map(v=>{const w=ytWin();
@@ -629,7 +630,7 @@ function youtube(){
   <div class="ytbar">${YCH.length>1?`<div class="seg" id="ytSeg" aria-label="Channel"><button data-c="all" aria-pressed="${state.yt==='all'}">Both channels</button>${YCH.map(x=>`<button data-c="${esc(x.channel_id)}" aria-pressed="${state.yt===x.channel_id}">${esc(x.title)}</button>`).join('')}</div>`:''}
     <span class="sub" style="margin:0">${end?`YouTube data up to ${dlabel(end)} (YouTube reports with a 2–3 day delay)`:'Waiting for first sync'}</span></div>
   ${errs.map(x=>`<p class="note">⚠️ ${esc(x.title)}: ${esc(String(x.status).replace(/^error: /,''))}</p>`).join('')}
-  <div class="ytchs">${YCH.filter(x=>ids.includes(x.channel_id)).map(x=>`<a class="ytch" href="https://youtube.com/channel/${esc(x.channel_id)}" target="_blank" rel="noopener">${x.thumb?`<img src="${esc(x.thumb)}" alt="" referrerpolicy="no-referrer">`:''}<span><b>${esc(x.title)}</b><span class="sub">${Nn(x.subs)!=null?compact(+x.subs)+' subscribers · ':''}${Nn(x.videos)!=null?num(+x.videos)+' videos':''}</span></span></a>`).join('')}</div>
+  <div class="ytchs">${YCH.filter(x=>ids.includes(x.channel_id)).map(x=>`<a class="ytch" href="${esc(YT_CH+x.channel_id)}" target="_blank" rel="noopener">${x.thumb?`<img src="${esc(x.thumb)}" alt="" referrerpolicy="no-referrer">`:''}<span><b>${esc(x.title)}</b><span class="sub">${Nn(x.subs)!=null?compact(+x.subs)+' subscribers · ':''}${Nn(x.videos)!=null?num(+x.videos)+' videos':''}</span></span></a>`).join('')}</div>
   <div class="grid kpis k4">
     ${kpi('Subscribers',subs||null,null,num,[],col)}
     ${kpi('Net new subscribers',net(T),net(P),num,w.map(r=>(r.gained||0)-(r.lost||0)),col)}

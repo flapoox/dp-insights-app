@@ -287,6 +287,7 @@ body{padding-top:env(safe-area-inset-top)}
 </div>
 
 <dialog id="actDlg" aria-label="Confirm change"></dialog>
+<script>window.addEventListener('error',function(e){var n=document.getElementById('syncNote');if(n){n.style.background='#fde8e8';n.textContent='Page error: '+(e.message||'')+' (line '+(e.lineno||'?')+')';}});</script>
 <div id="gate" hidden>
   <form class="gate-card" id="gateForm" autocomplete="off">
     <img src="icon-192.png" alt="Digital Poonam">
