@@ -910,12 +910,24 @@ function homeInsights(){
   return ins;
 }
 
+function heroCard(k,on){
+  const cur=platData(k); if(!cur) return '';
+  const bars=cur.bars.map(v=>v==null?0:v),mx=Math.max(1,...bars),top=bars.indexOf(Math.max(...bars));
+  const avg=bars.length?bars.reduce((s,x)=>s+x,0)/bars.length:0;
+  return `<section class="hero dk" data-k="${k}">
+    <div class="h-top"><div class="h-sw"><b>${PLAT[k].name.toUpperCase()}</b>${on?on.map((x,i)=>`<button type="button" class="h-pk${x===k?' on':''}" data-slide="${i}" aria-label="${PLAT[x].name}">${pbadge(x)}<i></i></button>`).join(''):pbadge(k)}</div>
+      <span class="h-rg">${state.range} days</span></div>
+    <div class="h-row">${cur.row1.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div><div class="h-d">${s[2]||'&nbsp;'}</div></div>`).join('')}</div>
+    <div class="h-row">${cur.row2.filter(s=>s[0]).map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div></div>`).join('')}</div>
+    <div class="h-ch"><span>${cur.chart.toUpperCase()}</span><span class="h-avg">14-day avg ${cur.fmt(avg)}</span></div>
+    <div class="h-bars">${bars.map((v,i)=>`<i style="height:${Math.max(4,Math.round(v/mx*96))}px" class="${i===top?'top':''}" title="${dlabel(days[DAYS-14+i].d)}: ${cur.fmt(v)}"></i>`).join('')}</div>
+    <div class="h-ax"><span>${dlabel(days[DAYS-14].d)}</span><span>${dlabel(days[DAYS-1].d)}</span></div>
+    ${on?`<button class="h-open" type="button" data-tab="${PLAT[k].tab}">Open ${PLAT[k].name} insights →</button>`:''}
+  </section>`;
+}
 function home(){
   const on=ON(); if(!on.includes(state.hp)) state.hp=on[0]||'ig';
   const hr=new Date().getHours(), greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
-  const cur=platData(state.hp);
-  const bars=cur?cur.bars.map(v=>v==null?0:v):[];const mx=Math.max(1,...bars),top=bars.indexOf(Math.max(...bars));
-  const avg=cur&&bars.length?bars.reduce((s,x)=>s+x,0)/bars.length:0;
   const todo=SC.filter(x=>x.status!=='Posted').slice(0,3);
   const vir=CP.filter(x=>x.ratio>=2&&x.date>=ymd(new Date(Date.now()-7*864e5))&&!(CR.find(c=>c.handle===x.handle)||{}).isMe).sort((a,b)=>b.ratio-a.ratio).slice(0,8);
   const ins=homeInsights();
@@ -926,16 +938,8 @@ function home(){
   <div class="tiles">${on.map(k=>{const d=platData(k);return `<button class="tile" type="button" data-tab="${PLAT[k].tab}">
     <span class="t-h">${pbadge(k)}${PLAT[k].name}</span><span class="t-v">${d.tile.v}</span><span class="t-l">${d.tile.l}</span><span class="t-d">${d.tile.d||'&nbsp;'}</span></button>`}).join('')}
     <button class="tile add" type="button" data-tab="channels"><span class="t-h">+ More channels</span><span class="t-l">Website, Google Business, Pinterest, LinkedIn</span></button></div>
-  ${cur?`<section class="hero dk">
-    <div class="h-top"><div class="h-sw"><b>${PLAT[state.hp].name.toUpperCase()}</b>${on.map(k=>`<button type="button" class="h-pk${k===state.hp?' on':''}" data-hp="${k}" aria-label="${PLAT[k].name}" aria-pressed="${k===state.hp}">${pbadge(k)}<i></i></button>`).join('')}</div>
-      <span class="h-rg">${state.range} days</span></div>
-    <div class="h-row">${cur.row1.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div><div class="h-d">${s[2]||'&nbsp;'}</div></div>`).join('')}</div>
-    <div class="h-row">${cur.row2.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div></div>`).join('')}</div>
-    <div class="h-ch"><span>${cur.chart.toUpperCase()}</span><span class="h-avg">14-day avg ${cur.fmt(avg)}</span></div>
-    <div class="h-bars">${bars.map((v,i)=>`<i style="height:${Math.max(4,Math.round(v/mx*96))}px" class="${i===top?'top':''}" title="${cur.fmt(v)}"></i>`).join('')}</div>
-    <div class="h-ax"><span>${dlabel(days[DAYS-14].d)}</span><span>${dlabel(days[DAYS-1].d)}</span></div>
-    <button class="h-open" type="button" data-tab="${PLAT[state.hp].tab}">Open ${PLAT[state.hp].name} →</button>
-  </section>`:''}
+  ${on.length?`<div class="hcar"><div class="htrack" id="htrack">${on.map(k=>heroCard(k,on)).join('')}</div>
+    <div class="hdots" role="tablist" aria-label="Channels">${on.map((k,i)=>`<button type="button" class="hdot${k===state.hp?' on':''}" data-slide="${i}" aria-label="${PLAT[k].name}"></button>`).join('')}</div></div>`:''}
   <div class="cap row"><span>Scripts to shoot</span><button class="linkbtn" type="button" data-tab="scripts">See all</button></div>
   ${todo.length?`<div class="list">${todo.map(x=>`<button class="li" type="button" data-tab="scripts"><span class="li-t"><b>${esc(x.title)}</b><span class="stype" style="--c:${(STYPE[x.type]||{}).c||'var(--accent)'}">${esc((STYPE[x.type]||{}).n||x.type)}</span></span>
     <span class="li-s">${esc(x.id)} · post ${esc(sdate(x.post_on))} · ${esc(x.owner)} · ${esc(x.status)}</span></button>`).join('')}</div>`:`<div class="list"><div class="li">${empty('All scripts are posted. Ask for new ones.')}</div></div>`}
@@ -946,10 +950,18 @@ function home(){
   <section class="panel">${ins.length?`<ul class="insights">${ins.map(x=>`<li><span class="ic ${x[0]}">${x[0]==='g'?'↑':x[0]==='w'?'!':'i'}</span><span>${x[1]}</span></li>`).join('')}</ul>`:empty('Not enough data yet.')}</section>`;
 }
 function afterHome(){
-  document.querySelectorAll('[data-hp]').forEach(b=>b.addEventListener('click',()=>{state.hp=b.dataset.hp;save();render()}));
+  const tr=$('#htrack');
+  if(tr){
+    const on=ON(), cards=[...tr.children], dots=[...document.querySelectorAll('.hdot')];
+    const go=(i,smooth)=>{const c=cards[i];if(c)tr.scrollTo({left:c.offsetLeft-tr.offsetLeft,behavior:smooth?'smooth':'auto'})};
+    const mark=i=>{dots.forEach((d,j)=>d.classList.toggle('on',j===i));if(on[i]&&state.hp!==on[i]){state.hp=on[i];save()}};
+    go(Math.max(0,on.indexOf(state.hp)),false);
+    let t;tr.addEventListener('scroll',()=>{clearTimeout(t);t=setTimeout(()=>{const x=tr.scrollLeft;let best=0,bd=1e9;cards.forEach((c,i)=>{const d=Math.abs(c.offsetLeft-tr.offsetLeft-x);if(d<bd){bd=d;best=i}});mark(best)},80)},{passive:true});
+    document.querySelectorAll('[data-slide]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const i=+b.dataset.slide;go(i,true);mark(i)}));
+  }
+  document.querySelectorAll('#view [data-tab]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();goTab(b.dataset.tab)}));
   document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const t=$(b.dataset.go);if(t)t.scrollIntoView({behavior:'smooth'})}));
 }
-
 function channelsView(){
   const on=ON(), total=on.length+PEND.length+(WEB_ON?0:1);
   const rows=k=>{const d=platData(k);return d.row1.slice(0,2).map(s=>`<span class="c-r"><span>${s[0]}</span><b>${s[1]}</b></span>`).join('')};
@@ -992,7 +1004,7 @@ function websiteView(){
   const when=L&&L.time?new Date(L.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):null;
   $('#conns').innerHTML=[['--fb','Facebook Page'],['--ig','Instagram'],['--ads','Ad account']].concat(YCH.map(c=>[c.colorName,c.title])).map(x=>`<span class="conn"><span class="dot" style="background:var(${x[0]})"></span>${x[1]}</span>`).join('');
   $('#syncNote').innerHTML = n
-    ? `<span aria-hidden="true">●</span><span><b>Live data.</b> ${n} days synced from Meta${when?`, last sync ${esc(when)}`:''}. Updates automatically every morning.${L&&L.detail&&L.detail!=='OK'?` <span style="color:var(--ink-2)">Notes: ${esc(L.detail)}</span>`:''}</span>`
+    ? `<span class="live-dot" aria-hidden="true"></span><span><b>Live</b> · synced ${when?esc(when):dates.length+' days'}</span>`
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
 const views={home:[home,afterHome],channels:[channelsView,()=>{}],website:[websiteView,()=>{}],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
@@ -1003,7 +1015,10 @@ function render(){
   document.querySelectorAll('#range button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.d===state.range));
   const c=slice(state.range);
   $('#rangeLabel').textContent=dlabel(c[0].d)+' – '+dlabel(c[c.length-1].d)+' '+c[c.length-1].d.getFullYear();
-  const [html,after]=views[state.tab];$('#view').innerHTML=html();after();
+  const [html,after]=views[state.tab];
+  const pk={instagram:'ig',facebook:'fb',ads:'ads',youtube:'yt',website:'web'}[state.tab];
+  try{ $('#view').innerHTML=(pk&&platData(pk)?`<div class="chero">${heroCard(pk)}</div>`:'')+html(); after(); }
+  catch(err){ $('#view').innerHTML=`<section class="panel">${empty('Could not show this screen: '+esc(err.message))}</section>`; }
   document.querySelectorAll('#bnav button').forEach(x=>x.setAttribute('aria-current',x.dataset.tab===state.tab?'page':'false'));
   const plat={instagram:'Instagram',facebook:'Facebook',ads:'Meta Ads',youtube:'YouTube',website:'Website',posts:'All posts',audience:'Audience'}[state.tab];
   $('#backRow').hidden=!plat; $('#backTitle').textContent=plat||'';

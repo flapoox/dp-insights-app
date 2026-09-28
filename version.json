@@ -1,11 +1,10 @@
 {
-  "version": "2.6",
-  "date": "2026-09-27",
+  "version": "2.7",
+  "date": "2026-09-28",
   "notes": [
-    "New look: Home with all channels at a glance",
-    "Tap IG / Ad / FB / YT in the big card to switch platform",
-    "New Channels screen: connected, waiting for approval, not connected",
-    "Bottom bar on phone: Home, Channels, Scripts, Competition",
-    "Website box added (connect Google Analytics anytime)"
+    "Swipe the big card left/right: Instagram, Meta Ads, Facebook, YouTube",
+    "Bottom bar now on bigger phones too: Home, Channels, Competition, Scripts",
+    "Every channel screen opens with its summary card",
+    "Cleaner header, no long sync messages"
   ]
 }
