@@ -1,9 +1,9 @@
 {
-  "version": "3.2",
+  "version": "3.3",
   "date": "2026-10-02",
   "notes": [
-    "Publish: one video to Instagram, Facebook, YouTube and LinkedIn",
-    "Owner approval before anything goes live, with Send back notes",
-    "Auto-write captions (Claude) with the cost shown"
+    "Publish now follows the approved design: New video → Review drafts → Posted",
+    "Laptop: side menu scrolls, page title shows which channel you are on, Light/Dark at top right",
+    "Ideas tab renamed to Competitors; fixed Scripts filters"
   ]
 }

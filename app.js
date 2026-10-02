@@ -783,7 +783,7 @@ function competition(){
   const fmtBy={};CP.filter(p=>others.includes(p.handle)&&p.date>=ymd(new Date(Date.now()-30*864e5))).forEach(p=>{const f=fmtBy[p.kind]=fmtBy[p.kind]||{n:0,hit:0};f.n++;if(p.ratio>=2)f.hit++});
   const me=CR.find(c=>c.isMe),meP=me?CP.filter(p=>p.handle===me.handle):[];
   return `
-  <div class="hhead"><div><h2 class="hello">Ideas</h2></div></div>
+  <div class="hhead"><div><h2 class="hello">Competitors</h2><p class="sub" style="margin:4px 0 0">What works for others, and ideas for your next post</p></div></div>
   <p class="sub" style="margin:6px 0 12px">Public data from ${CR.filter(c=>!c.isMe).length} creators you follow (Instagram business/creator accounts and YouTube). Refreshes every morning. <b>Viral</b> = a post with at least 2× that creator's usual engagement (likes + comments; views on YouTube).</p>
   ${errs.map(c=>`<p class="note">⚠️ @${esc(c.handle)}: ${esc(c.status)}</p>`).join('')}
   <div class="ytbar"><div class="seg" id="cwSeg" aria-label="Window"><button data-v="7" aria-pressed="${W===7}">This week</button><button data-v="30" aria-pressed="${W===30}">Last 30 days</button></div>
@@ -1155,30 +1155,197 @@ function pubRowHtml(p){
   return `<button type="button" class="pq" data-pid="${esc(p.id)}"><span class="pq-v">${PLAY}</span>
     <span class="pq-t"><b>${esc(p.title)}</b><span>${esc(pubLine(p))}</span><span class="pq-b">${on.map(pbx).join('')}</span></span>${pstPill(p.status)}</button>`;
 }
+function pubDefaults(){
+  const c=PUB().conn||{};
+  return {modes:{ig:'auto',fb:'auto',yt:c.yt&&c.yt.public?'auto':'manual',li:c.li&&c.li.days>0?'auto':'off'},ai:!!c.ai,when:'best',pick:'',scriptId:''};
+}
+let PS=null;
+const t730=()=>{const n=new Date(),t=new Date();t.setHours(19,30,0,0);if(t<n)t.setDate(t.getDate()+1);return t};
+const dayWord=d=>{const n=new Date();return d.toDateString()===n.toDateString()?'Today':'Tomorrow'};
+const whenISO=s=>s.when==='best'?t730().toISOString():s.when==='pick'?(s.pick?new Date(s.pick).toISOString():''):'';
+const localDT=iso=>{const x=new Date(iso);x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,16)};
+const segBtns=(k,mode,attr)=>`<div class="pseg" role="group" aria-label="${PB[k][2]}">${[['auto','Auto'],['manual','Manual'],['off','Off']].map(m=>`<button type="button" ${attr}="${k}" data-m="${m[0]}" aria-pressed="${mode===m[0]}">${m[1]}</button>`).join('')}</div>`;
 function publishView(){
   if(PV.mode==='edit') return pubEditView();
   if(PV.mode==='view') return pubDetailView();
-  const P=PUB(),posts=P.posts||[],own=CAN('approve');
+  const P=PUB(),posts=P.posts||[],own=CAN('approve'),c=P.conn||{},ready=P.ready||[];
+  if(!PS) PS=pubDefaults();
+  if(PS.fi==null||PS.fi>=ready.length) PS.fi=0;
+  const f=ready[PS.fi];
   const waiting=posts.filter(p=>p.status==='pending');
   const active=posts.filter(p=>['draft','sentback','approved','scheduled','posting','failed','partly','manual'].includes(p.status)&&(own||p.status!=='draft'||p.byId===P.me));
   const done=posts.filter(p=>p.status==='posted').slice(0,10);
+  const scr=(DATA.scripts||[]).find(x=>x.id===PS.scriptId);
+  const conn={ig:c.meta&&c.cld,fb:c.meta&&c.cld,yt:!!c.yt,li:!!(c.li&&c.li.days>0)};
+  const SUB={ig:'Reel · Manual for trending audio',fb:'Reel on your Page',yt:c.yt&&c.yt.public?'Short':'Short · Private until Google’s audit',li:'Your profile · English'};
+  const prow=k=>`<div class="prow pp">${pbx(k)}<span class="t"><b>${PB[k][2]}</b><span>${SUB[k]}</span>${PS.modes[k]==='auto'&&!conn[k]?`<span class="w">Not connected yet${own?' · see Connections below':''}</span>`:''}</span>${segBtns(k,PS.modes[k],'data-mode')}</div>`;
+  const nA=PKEYS.filter(k=>PS.modes[k]==='auto').length,nM=PKEYS.filter(k=>PS.modes[k]==='manual').length;
+  const cta=(nA?nA+' draft'+(nA>1?'s':''):'')+(nA&&nM?' + ':'')+(nM?nM+' manual':'');
+  const bt=t730();
   const appr=p=>{const on=PKEYS.filter(k=>p.plats[k]&&p.plats[k].mode!=='off');return `<article class="apr">
-    <div class="apr-h"><span class="pq-v lg">${PLAY}</span><div class="apr-t"><b>${esc(p.title)}</b><span>By ${esc(p.by)} · ${esc(when(p.updated||p.created))}</span><span class="pq-b">${on.map(pbx).join('')}</span></div></div>
-    <div class="apr-n">${p.when?'Goes live '+esc(when(p.when))+' after approval':'Goes live as soon as you approve'} · ${on.map(k=>PB[k][2]+(p.plats[k].mode==='manual'?' (by hand)':'')).join(', ')}</div>
+    <div class="apr-h"><span class="pq-v lg">${PLAY}</span><div class="apr-t"><b>${esc(p.title)}</b><span>Drafts by ${esc(p.by)} · ${esc(when(p.updated||p.created))}</span><span class="pq-b">${on.map(pbx).join('')}</span></div></div>
+    <div class="apr-n">${on.filter(k=>p.plats[k].mode==='auto').length} captions ready · ${p.when?'goes live '+esc(when(p.when))+' after approval':'goes live right after approval'}</div>
     <div class="apr-a"><button type="button" class="abtn a-ghost" data-pback="${esc(p.id)}">Send back</button><button type="button" class="abtn a-ghost" data-pid="${esc(p.id)}">Open</button><button type="button" class="abtn a-good" data-pok="${esc(p.id)}">Approve</button></div>
     <p class="err" data-perr="${esc(p.id)}" role="alert"></p></article>`};
-  const ready=(P.ready||[]);
+  const hero=f?`<section class="vhero"><div class="vh-top"><span>NEW IN "READY TO POST"</span><span>Google Drive</span></div>
+      <div class="vh-v"><span class="vh-thumb">${PLAY}</span><div class="vh-t"><b>${esc(f.name)}</b><span>${mb(f.size)} · added ${esc(ago(f.created))}${scr?' · '+esc(scr.id):''}</span>
+      <span class="vh-chips">${scr?`<span class="vchip">${esc((STYPE[scr.type]||{}).n||scr.type)}</span>`:''}<a class="vchip ok" href="${esc(f.url)}" target="_blank" rel="noopener">▶ Watch</a></span></div></div>
+      ${ready.length>1?`<div class="vh-nav"><button type="button" class="vh-b" id="vPrev" aria-label="Previous video" ${PS.fi?'':'disabled'}>‹</button><span>${PS.fi+1} of ${ready.length} new videos</span><button type="button" class="vh-b" id="vNext" aria-label="Next video" ${PS.fi<ready.length-1?'':'disabled'}>›</button></div>`:''}</section>`
+    :`<section class="vhero"><div class="vh-top"><span>"READY TO POST"</span><span>Google Drive</span></div><div class="vh-empty"><b>No new video yet</b><span>Editors put the finished video (MP4, 9:16) in the Google Drive folder “Ready to post”. It shows up here.</span>${P.folderUrl?`<a class="vchip ok" href="${esc(P.folderUrl)}" target="_blank" rel="noopener">Open folder</a>`:''}${P.folderErr?`<span>(${esc(P.folderErr)})</span>`:''}</div></section>`;
   return `<div class="hhead"><div><h2 class="hello">Publish</h2><p class="sub" style="margin:4px 0 0">One video → every platform, after an Owner's OK</p></div></div>
   ${P.error?`<div class="note">Could not load Publish: ${esc(P.error)}</div>`:''}
-  ${own&&waiting.length?`<div class="cap">Waiting for you · ${waiting.length}</div><div class="aprs">${waiting.map(appr).join('')}</div>`:''}
-  <div class="cap row"><span>New in "Ready to post"</span>${P.folderUrl?`<a class="linkbtn" href="${esc(P.folderUrl)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
-  ${ready.length?`<div class="list">${ready.map(f=>`<div class="prow"><span class="pq-v">${PLAY}</span><span class="t"><b>${esc(f.name)}</b><span>${mb(f.size)} · added ${esc(ago(f.created))}</span></span><button type="button" class="abtn a-good sm" data-pnew="${esc(f.id)}">Make post</button></div>`).join('')}</div>`
-    :`<section class="panel">${empty('No new videos. Editors put finished videos (MP4, 9:16) in the Google Drive folder “Ready to post”.'+(P.folderErr?' ('+esc(P.folderErr)+')':''))}</section>`}
+  ${own&&waiting.length?`<div class="cap">Waiting for you · ${waiting.length}</div><div class="note dk">Either Owner can approve. The first approval posts it; the other Owner sees who approved.</div><div class="aprs" style="margin-top:12px">${waiting.map(appr).join('')}</div>`:''}
+  <div class="pgrid"><div class="pcol">
+  ${hero}
+  ${f?`<label class="fld" style="margin-top:14px">Which script is this? (fills captions for free)<select id="pScript"><option value="">— None —</option>${(DATA.scripts||[]).map(x=>`<option value="${esc(x.id)}" ${x.id===PS.scriptId?'selected':''}>${esc(x.id+' · '+x.title)}</option>`).join('')}</select></label>
+  <div class="cap">Post to</div>
+  <div class="list">${PKEYS.map(prow).join('')}
+    <div class="prow pp dim"><span class="pbadge" style="background:#C8102E">P</span><span class="t"><b>Pinterest</b><span>Trial approved · coming soon</span></span><span class="pill">Soon</span></div>
+    <div class="prow pp dim"><span class="pbadge" style="background:#1E7F3E">G</span><span class="t"><b>Google Business</b><span>Waiting for Google</span></span><span class="pill">Waiting</span></div></div>
+  <p class="sub" style="margin:8px 4px 0"><b>Manual</b> = DP Insights gets the video and caption ready, and you post it yourself in the app (for trending audio, collab tags or location).</p>`:''}
+  </div><div class="pcol">
+  ${f?`<div class="cap">Captions</div>
+  <section class="panel aiw"><div class="aiw-h"><span class="aiw-i" aria-hidden="true">✦</span><div><b>Auto-write captions</b><span>Hinglish for Instagram + Facebook, English for LinkedIn, title + description for YouTube.</span></div>
+    <button type="button" class="tgl" id="pAiT" role="switch" aria-checked="${PS.ai&&!!c.ai}" aria-label="Auto-write captions" ${c.ai?'':'disabled'}><span></span></button></div>
+    <div class="aiw-c"><span>Uses Claude credit</span><b>${c.ai?'≈ ₹0.50 per video':'Not switched on yet'}</b></div>
+    <p class="sub" style="margin:0">${c.ai?'Switch off to write captions yourself'+(PS.scriptId?' (the script caption is filled in for free)':'')+'.':(own?'Owner: Sheet → Digital Poonam → Publish → 5. Save Claude key. ':'')+'For now, captions come from the script, or you write them on the next screen.'}</p></section>
+  <div class="cap">When</div>
+  <div class="whens">
+    <button type="button" class="whn" data-w="best" aria-pressed="${PS.when==='best'}"><span>Best time</span><b>${dayWord(bt)} 7:30 pm</b></button>
+    <label class="whn ${PS.when==='pick'?'on':''}" id="wPickL"><span>Custom</span><input type="datetime-local" id="pWhen" value="${PS.pick||''}" min="${localDT(new Date().toISOString())}" aria-label="Pick date and time"></label>
+    <button type="button" class="whn" data-w="now" aria-pressed="${PS.when==='now'}"><span>Right away</span><b>After approval</b></button>
+  </div>
+  <p class="err" id="pErr" role="alert"></p>
+  <button type="button" class="abtn a-good big wide" id="pMake" ${nA+nM?'':'disabled'}>✦ ${nA+nM?'Make '+cta:'Turn on a platform'}</button>
+  <p class="sub" style="text-align:center;margin-top:8px">Nothing is posted until ${own?'you approve':'an Owner approves'}</p>`:''}
+  </div></div>
   ${!own&&waiting.length?`<div class="cap">Waiting for an Owner · ${waiting.length}</div><div class="list">${waiting.map(pubRowHtml).join('')}</div>`:''}
   <div class="cap">In progress</div>
   ${active.length?`<div class="list">${active.map(pubRowHtml).join('')}</div>`:`<section class="panel">${empty('Nothing in progress.')}</section>`}
   ${done.length?`<div class="cap">Posted</div><div class="list">${done.map(pubRowHtml).join('')}</div>`:''}
   ${pubConnHtml()}`;
+}
+function pubOpen(id){
+  const p=(PUB().posts||[]).find(x=>x.id===id);if(!p)return;
+  const own=CAN('approve'),mine=own||p.byId===PUB().me;
+  const editable=(['draft','sentback','pending'].includes(p.status)&&mine)||(own&&['approved','scheduled'].includes(p.status)&&!(p.res&&Object.values(p.res).some(r=>r&&(r.st==='ok'||r.st==='working'))));
+  PV=editable?{mode:'edit',id,ok:{},d:JSON.parse(JSON.stringify({title:p.title,scriptId:p.scriptId,ai:p.ai,when:p.when,plats:p.plats}))}:{mode:'view',id};
+}
+const PSUB2={ig:['9:16','Reel'],fb:['9:16','Reel'],yt:['9:16','Short'],li:['4:5','Native video']};
+function pubEditView(){
+  const p=(PUB().posts||[]).find(x=>x.id===PV.id);
+  if(!p) return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button></div><section class="panel">${empty('This post is gone.')}</section>`;
+  const d=PV.d,c=PUB().conn||{},own=CAN('approve');
+  const on=PKEYS.filter(k=>d.plats[k].mode!=='off'),skipped=PKEYS.filter(k=>d.plats[k].mode==='off');
+  const nOk=on.filter(k=>PV.ok[k]).length;
+  const wtxt=d.when?when(d.when):'right after approval';
+  const card=k=>{const x=d.plats[k],man=x.mode==='manual',okd=!!PV.ok[k];
+    const lab=k==='yt'?'Title + description':k==='li'?'Post text (English)':'Caption';
+    const chips=[d.ai?'AI label on':'',k==='yt'?(c.yt?esc(c.yt.title):'YouTube not connected'):'',k==='yt'&&!(c.yt&&c.yt.public)&&!man?'Private until audit':'',k==='li'?'Personal profile':'',(d.when?'Scheduled ':'Posts ')+esc(wtxt)].filter(Boolean);
+    const pill=man?'<span class="pill warn">Manual</span>':okd?'<span class="pill good">Approved</span>':'<span class="pill acc">Draft</span>';
+    return `<article class="dcard${man?' man':''}${okd?' okd':''}">
+      <div class="dc-h">${pbx(k)}<b>${PB[k][2]}${k==='yt'?' Short':''}</b>${pill}</div>
+      ${man?`<p class="dc-m">You post this one yourself${k==='ig'?' (e.g. with trending audio)':''}. After approval, the video and this caption are ready in the app to copy.</p>`:''}
+      <div class="dc-b"><span class="dc-th">${PLAY}<i>${PSUB2[k][0]}</i></span><div class="dc-f">
+        <div class="dc-l"><span>${lab}</span>${c.ai?`<button type="button" class="rw" data-rw="${k}">✦ Rewrite</button>`:''}</div>
+        ${k==='yt'?`<input class="dc-in" data-cap="yt" data-f="title" maxlength="100" value="${esc(x.title||'')}" placeholder="YouTube title" aria-label="YouTube title">`:''}
+        <textarea class="dc-ta" data-cap="${k}" data-f="cap" maxlength="${{ig:2200,fb:5000,yt:5000,li:3000}[k]}" aria-label="${PB[k][2]} ${lab}" placeholder="${k==='li'?'Write in English':'Write the caption'}">${esc(x.cap||'')}</textarea>
+        <span class="cnt" data-cnt="${k}cap">${(x.cap||'').length}</span></div></div>
+      <div class="dc-c">${chips.map(t=>`<span class="pill">${t}</span>`).join('')}</div>
+      ${okd?`<button type="button" class="dc-ok" data-unok="${k}">✓ Approved · tap to undo</button>`
+        :`<div class="dc-a"><button type="button" class="abtn a-ghost" data-skip="${k}">Skip</button>${own?`<button type="button" class="abtn a-good" data-okc="${k}">Approve</button>`:man?`<button type="button" class="abtn a-ghost" data-copy="${k}">Copy caption</button>`:''}</div>`}
+    </article>`};
+  const sentBy=p.status==='sentback'?((p.history||[]).slice().reverse().find(h=>/^Sent back/.test(h.what))||{}).who:'';
+  return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button>${pstPill(p.status)}</div>
+  <h2 class="hello" style="margin:2px 0 2px">Review drafts</h2><p class="sub" style="margin:0">${esc(p.title)} · ${esc(wtxt)}</p>
+  ${own?`<div class="prog" aria-hidden="true">${on.map(k=>`<span class="${PV.ok[k]?'on':''}"></span>`).join('')}</div><p class="sub" style="margin:6px 0 0;font-weight:700">${nOk} of ${on.length} approved</p>`:''}
+  ${p.status==='sentback'?`<div class="note warnb"><b>Sent back${sentBy?' by '+esc(sentBy):''}:</b> ${esc(p.note||'Please make changes.')}</div>`:''}
+  ${p.status==='pending'&&!own?`<div class="note">Sent for approval. You can still change captions until an Owner approves.</div>`:''}
+  <p class="ok" id="pAiMsg" role="status"></p>
+  <div class="dcards">${on.map(card).join('')}</div>
+  ${skipped.length?`<div class="skips"><span class="sub">Skipped:</span>${skipped.map(k=>`<button type="button" class="vchip" data-unskip="${k}">${pbx(k)} ${PB[k][2]} · bring back</button>`).join('')}</div>`:''}
+  <section class="apanel">
+    <label class="ap-w"><span>Goes live</span><select id="pWhenSel"><option value="now" ${!d.when?'selected':''}>Right after approval</option><option value="best" ${d.when&&Math.abs(new Date(d.when)-t730())<60000?'selected':''}>${dayWord(t730())} 7:30 pm</option><option value="pick" ${d.when&&Math.abs(new Date(d.when)-t730())>=60000?'selected':''}>${d.when&&Math.abs(new Date(d.when)-t730())>=60000?esc(when(d.when)):'Pick date & time…'}</option></select></label>
+    <input type="datetime-local" id="pWhenPick" hidden min="${localDT(new Date().toISOString())}" aria-label="Pick date and time">
+    <p class="err" id="pErr" role="alert"></p>
+    <button type="button" class="ap-go" id="pGo" ${on.length?'':'disabled'}>${own?'Approve '+(on.length>1?'all '+on.length:'')+' & '+(d.when?'schedule':'post now'):(p.status==='pending'?'Save changes':'Send for approval')}</button>
+    <div class="ap-row"><button type="button" class="ap-l" id="pSave">Save &amp; close</button>${own&&['pending','approved','scheduled'].includes(p.status)&&p.byId!==PUB().me?`<button type="button" class="ap-l" id="pSendBack">Send back with a note</button>`:''}<button type="button" class="ap-l bad" id="pDel">Remove</button></div>
+  </section>`;
+}
+function afterPublish(){
+  const v=$('#view');
+  const back=$('#pBack');if(back)back.onclick=()=>{PV={mode:'list'};render();window.scrollTo(0,0)};
+  v.querySelectorAll('[data-pid]').forEach(b=>b.addEventListener('click',()=>{pubOpen(b.dataset.pid);render();window.scrollTo(0,0)}));
+  v.querySelectorAll('[data-pok]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Tap again'))return;pubCall({op:'approve',id:b.dataset.pok},b,()=>render())}));
+  v.querySelectorAll('[data-pback]').forEach(b=>b.addEventListener('click',()=>pubAskNote(n=>pubCall({op:'sendback',id:b.dataset.pback,note:n},b,()=>render()))));
+  if(PV.mode==='edit') return afterPubEdit();
+  if(PV.mode==='view'){
+    const p=(PUB().posts||[]).find(x=>x.id===PV.id);if(!p)return;
+    v.querySelectorAll('[data-mcopy]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.mcopy;copyText((k==='yt'?(p.plats.yt.title||p.title)+'\n\n':'')+(p.plats[k].cap||'')).then(ok=>{b.textContent=ok?'✓ Copied':'Copy failed'})}));
+    v.querySelectorAll('[data-mdone]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Posted? Tap again'))return;pubCall({op:'manualDone',id:p.id,plat:b.dataset.mdone},b,()=>render())}));
+    const rt=$('#pRetry');if(rt)rt.onclick=()=>pubCall({op:'retry',id:p.id},rt,()=>render());
+    const rf=$('#pRefresh');if(rf)rf.onclick=()=>pubCall({op:'list'},rf,()=>render());
+    const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:p.id,note:n},sb,()=>render()));
+    const dl=$('#pDel');if(dl)dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:p.id},dl,()=>{PV={mode:'list'};render()})};
+    return;
+  }
+  // step 1: new video
+  const ready=PUB().ready||[],f=ready[PS.fi];
+  const pv=$('#vPrev'),nx=$('#vNext');if(pv)pv.onclick=()=>{PS.fi--;render()};if(nx)nx.onclick=()=>{PS.fi++;render()};
+  if(!f) return;
+  const sc=$('#pScript');sc.addEventListener('change',()=>{PS.scriptId=sc.value;render()});
+  v.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{PS.modes[b.dataset.mode]=b.dataset.m;render()}));
+  const tg=$('#pAiT');if(tg)tg.onclick=()=>{PS.ai=!PS.ai;render()};
+  v.querySelectorAll('[data-w]').forEach(b=>b.addEventListener('click',()=>{PS.when=b.dataset.w;render()}));
+  const pw=$('#pWhen');pw.addEventListener('change',()=>{if(!pw.value)return;if(new Date(pw.value)<new Date()){$('#pErr').textContent='Pick a time in the future.';return}PS.pick=pw.value;PS.when='pick';render()});
+  $('#pMake').onclick=async()=>{
+    const b=$('#pMake'),err=$('#pErr');err.textContent='';
+    if(PS.when==='pick'&&!PS.pick){err.textContent='Pick the date and time first.';return}
+    const s=(DATA.scripts||[]).find(x=>x.id===PS.scriptId),c=PUB().conn||{};
+    const title=s?s.title:f.name.replace(/\.[^.]+$/,'');
+    const ai=s?/^yes/i.test(String(s.ai_label)):false;
+    const plats={};PKEYS.forEach(k=>plats[k]={mode:PS.modes[k],cap:''});plats.yt.title='';
+    if(s){plats.ig.cap=s.caption||'';plats.fb.cap=s.caption||'';plats.yt.cap=s.caption||'';plats.yt.title=String(s.title||'').slice(0,90)+' #Shorts'}
+    b.disabled=true;b.textContent='Making drafts…';
+    let cost=null;
+    if(PS.ai&&c.ai){const r=await sendPub({op:'caption',title,fileName:f.name,scriptId:PS.scriptId,ai});
+      if(r&&r.ok){const x=r.caps;plats.ig.cap=x.ig;plats.fb.cap=x.fb;plats.li.cap=x.li;plats.yt.title=x.yt_title;plats.yt.cap=x.yt_desc;cost=r.cost}
+      else err.textContent='Auto-write did not work ('+((r&&r.message)||'no internet')+'). Drafts are made without it; write captions on the next screen.'}
+    const r=await sendPub({op:'save',post:{fileId:f.id,title,scriptId:PS.scriptId,ai,when:whenISO(PS),plats}});
+    if(!r||!r.ok){b.disabled=false;b.textContent='Try again';err.textContent=(r&&r.message)||'Something went wrong. Check your internet.';return}
+    DATA.pub=r.pub;PS=null;pubOpen(r.id);render();window.scrollTo(0,0);
+    const m=$('#pAiMsg');if(m)m.textContent=cost!=null?'✓ Captions written · cost ₹'+cost+'. Read them, change anything, then approve.':'Drafts ready. Check each caption, then approve.';
+  };
+}
+function afterPubEdit(){
+  const d=PV.d,v=$('#view'),p=(PUB().posts||[]).find(x=>x.id===PV.id);if(!p)return;
+  const keep=()=>{};
+  v.querySelectorAll('[data-cap]').forEach(el=>el.addEventListener('input',()=>{d.plats[el.dataset.cap][el.dataset.f]=el.value;delete PV.ok[el.dataset.cap];const c=v.querySelector(`[data-cnt="${el.dataset.cap}${el.dataset.f}"]`);if(c)c.textContent=el.value.length}));
+  v.querySelectorAll('[data-skip]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.skip;d.plats[k].modeWas=d.plats[k].mode;d.plats[k].mode='off';delete PV.ok[k];render()}));
+  v.querySelectorAll('[data-unskip]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.unskip;d.plats[k].mode=d.plats[k].modeWas||'auto';render()}));
+  v.querySelectorAll('[data-okc]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.okc,x=d.plats[k];
+    if(x.mode==='auto'&&!(k==='yt'?x.title:x.cap)){$('#pErr').textContent='';b.textContent=k==='yt'?'Add a title first':'Add a caption first';return}
+    PV.ok[k]=true;render()}));
+  v.querySelectorAll('[data-unok]').forEach(b=>b.addEventListener('click',()=>{delete PV.ok[b.dataset.unok];render()}));
+  v.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.copy;copyText((k==='yt'?(d.plats.yt.title||'')+'\n\n':'')+(d.plats[k].cap||'')).then(ok=>{b.textContent=ok?'✓ Copied':'Copy failed'})}));
+  v.querySelectorAll('[data-rw]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.rw;
+    pubCall({op:'caption',title:d.title,fileName:p.file.name,scriptId:d.scriptId,ai:d.ai},b,r=>{const x=r.caps;
+      if(k==='yt'){d.plats.yt.title=x.yt_title;d.plats.yt.cap=x.yt_desc}else d.plats[k].cap=x[k];delete PV.ok[k];
+      if(DATA.pub&&DATA.pub.conn)DATA.pub.conn.aiMonth=r.month;render();const m=$('#pAiMsg');if(m)m.textContent='✓ '+PB[k][2]+' rewritten · cost ₹'+r.cost})}));
+  const ws=$('#pWhenSel'),wp=$('#pWhenPick');
+  ws.addEventListener('change',()=>{if(ws.value==='now'){d.when='';render()}else if(ws.value==='best'){d.when=t730().toISOString();render()}else{wp.hidden=false;wp.focus();try{wp.showPicker()}catch(e){}}});
+  wp.addEventListener('change',()=>{if(!wp.value)return;const x=new Date(wp.value);if(x<new Date()){$('#pErr').textContent='Pick a time in the future.';return}d.when=x.toISOString();render()});
+  const payload=()=>{const pl=JSON.parse(JSON.stringify(d.plats));PKEYS.forEach(k=>delete pl[k].modeWas);return {title:d.title,scriptId:d.scriptId,ai:d.ai,when:d.when||'',plats:pl}};
+  const check=()=>{const on=PKEYS.filter(k=>d.plats[k].mode!=='off');if(!on.length)return 'Bring back at least one platform.';
+    const miss=on.filter(k=>d.plats[k].mode==='auto'&&!(k==='yt'?d.plats.yt.title:d.plats[k].cap));if(miss.length)return 'Add the '+(miss[0]==='yt'?'YouTube title':PB[miss[0]][2]+' caption')+' first.';
+    if(d.when&&new Date(d.when)<new Date())return 'The time has passed. Pick a new time.';return ''};
+  $('#pGo').onclick=()=>{const e=check();if(e){$('#pErr').textContent=e;return}const b=$('#pGo'),own=CAN('approve');
+    const op=own?'approve':(p.status==='pending'?'save':'submit');
+    if(own&&!confirmInline(b,'Tap again to approve'))return;
+    pubCall({op,id:PV.id,post:payload()},b,r=>{const q=(PUB().posts||[]).find(x=>x.id===r.id);PV=q&&['approved','scheduled','posting','posted','manual'].includes(q.status)?{mode:'view',id:r.id}:{mode:'list'};render();window.scrollTo(0,0)})};
+  $('#pSave').onclick=()=>pubCall({op:'save',id:PV.id,post:payload()},$('#pSave'),()=>{PV={mode:'list'};render();window.scrollTo(0,0)});
+  const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:PV.id,note:n},sb,()=>{PV={mode:'list'};render()}));
+  const dl=$('#pDel');dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:PV.id},dl,()=>{PV={mode:'list'};render()})};
 }
 function pubBanner(){
   if(!DATA.pub||!CAN('publish'))return '';const ps=DATA.pub.posts||[];
@@ -1201,68 +1368,6 @@ function pubConnHtml(){
     ${row(pbx('li'),'LinkedIn',!!(c.li&&c.li.days>3),c.li?(c.li.days>0?c.li.name+' · sign-in valid '+c.li.days+' more days':'Sign-in expired'):'Not connected','Sheet → Publish → 3. Connect LinkedIn')}
     ${row(icon('✦'),'Auto-write captions',!!c.ai,c.ai?'Claude · ₹'+(c.aiMonth||0)+' used this month':'Off · write captions yourself','Sheet → Publish → 5. Save Claude key')}
   </div>`;
-}
-function pubNew(fileId){
-  const f=(PUB().ready||[]).find(x=>x.id===fileId);if(!f)return;
-  const c=PUB().conn||{};
-  PV={mode:'edit',d:{fileId,file:f,title:f.name.replace(/\.[^.]+$/,''),scriptId:'',ai:false,when:'',plats:{ig:{mode:'auto',cap:''},fb:{mode:'auto',cap:''},yt:{mode:c.yt&&c.yt.public?'auto':'manual',title:'',cap:''},li:{mode:c.li?'auto':'off',cap:''}}}};
-}
-function pubOpen(id){
-  const p=(PUB().posts||[]).find(x=>x.id===id);if(!p)return;
-  const own=CAN('approve'),mine=own||p.byId===PUB().me;
-  const editable=(['draft','sentback','pending'].includes(p.status)&&mine)||(own&&['approved','scheduled'].includes(p.status)&&!(p.res&&Object.values(p.res).some(r=>r&&(r.st==='ok'||r.st==='working'))));
-  PV=editable?{mode:'edit',id,d:JSON.parse(JSON.stringify({fileId:p.file.id,file:p.file,title:p.title,scriptId:p.scriptId,ai:p.ai,when:p.when,plats:p.plats})),p}:{mode:'view',id};
-}
-const PSUB={ig:'Reel · choose “By hand” for trending audio',fb:'Reel on your Page',yt:'Short',li:'Your profile · English'};
-function pubEditView(){
-  const d=PV.d,p=PV.p,c=PUB().conn||{},own=CAN('approve'),scr=(DATA.scripts||[]);
-  const conn={ig:c.meta&&c.cld,fb:c.meta&&c.cld,yt:!!c.yt,li:!!(c.li&&c.li.days>0)};
-  const seg=k=>`<div class="seg" role="group" aria-label="${PB[k][2]}">${[['auto','Auto'],['manual','By hand'],['off','Off']].map(m=>`<button type="button" data-seg="${k}" data-m="${m[0]}" aria-pressed="${d.plats[k].mode===m[0]}">${m[1]}</button>`).join('')}</div>`;
-  const prow=k=>`<div class="prow pp">${pbx(k)}<span class="t"><b>${PB[k][2]}</b><span>${k==='yt'&&!(c.yt&&c.yt.public)&&d.plats.yt.mode==='auto'?'Short · uploads Private until Google’s audit':PSUB[k]}</span>${d.plats[k].mode==='auto'&&!conn[k]?`<span class="w">Not connected yet${own?'':' · ask an Owner'}</span>`:''}</span>${seg(k)}</div>`;
-  const on=PKEYS.filter(k=>d.plats[k].mode!=='off');
-  const ta=(k,lab,max,field='cap',rows=5)=>`<label class="fld">${lab}<textarea data-cap="${k}" data-f="${field}" maxlength="${max}" rows="${rows}">${esc(d.plats[k][field]||'')}</textarea><span class="cnt" data-cnt="${k}${field}">${(d.plats[k][field]||'').length} / ${max}</span></label>`;
-  const now=new Date(),t730=new Date();t730.setHours(19,30,0,0);if(t730<now)t730.setDate(t730.getDate()+1);
-  const isPick=d.when&&Math.abs(new Date(d.when)-t730)>60000;
-  const local=iso=>{const x=new Date(iso);x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,16)};
-  const isOwnerFlow=own;
-  const firstBtn=isOwnerFlow?(d.when&&new Date(d.when)>now?'Approve & schedule':'Approve & post now'):'Send for approval';
-  return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button>${p?pstPill(p.status):''}</div>
-  <section class="pubhero"><div class="ph-top"><span>${p?'EDIT POST':'NEW POST'}</span><span>Google Drive</span></div>
-    <div class="ph-v"><span class="pq-v xl">${PLAY}</span><div class="ph-t"><b>${esc(d.file.name)}</b><span>${mb(d.file.size||0)}${d.file.url?` · <a href="${esc(d.file.url)}" target="_blank" rel="noopener">Open video</a>`:''}</span></div></div></section>
-  ${p&&p.status==='sentback'?`<div class="note warnb"><b>Sent back${p.history&&p.history.length?' by '+esc((p.history.slice().reverse().find(h=>/^Sent back/.test(h.what))||{}).who||''):''}:</b> ${esc(p.note||'Please make changes.')}</div>`:''}
-  <div class="pform">
-  <label class="fld">Title (for you and YouTube)<input id="pTitle" maxlength="140" value="${esc(d.title)}"></label>
-  <label class="fld">Which script is this? (optional, fills captions for free)<select id="pScript"><option value="">— None —</option>${scr.map(x=>`<option value="${esc(x.id)}" ${x.id===d.scriptId?'selected':''}>${esc(x.id+' · '+x.title)}</option>`).join('')}</select></label>
-  <label class="chk"><input type="checkbox" id="pAi" ${d.ai?'checked':''}><span><b>Made with AI</b> (AI clone, AI voice or animation). Adds the AI label where needed.</span></label>
-  </div>
-  <div class="cap">Post to</div>
-  <div class="list">${PKEYS.map(prow).join('')}</div>
-  <p class="sub" style="margin:8px 4px 0"><b>By hand</b> = DP Insights does not post it. After approval you get the caption and video to post yourself, e.g. for trending audio on Instagram.</p>
-  ${on.length?`<div class="cap">Captions</div>
-  <section class="panel aiw"><div class="aiw-h"><span class="aiw-i" aria-hidden="true">✦</span><div><b>Auto-write captions</b><span>Hinglish for Instagram + Facebook, English for LinkedIn, title + description for YouTube.</span></div></div>
-    ${c.ai?`<div class="aiw-c"><span>Uses Claude credit</span><b>≈ ₹0.50 per click</b></div><div class="aiw-a"><button type="button" class="abtn a-good" id="pAiGo">✦ Auto-write all</button>${d.scriptId?`<button type="button" class="abtn a-ghost" id="pUseScript">Use script caption (free)</button>`:''}</div>`
-      :`<p class="sub" style="margin:0">Not switched on${own?' (Sheet → Digital Poonam → Publish → 5. Save Claude key)':''}. Write captions below${d.scriptId?' or use the script caption':''}.</p>${d.scriptId?`<div class="aiw-a"><button type="button" class="abtn a-ghost" id="pUseScript">Use script caption (free)</button></div>`:''}`}
-    <p class="ok" id="pAiMsg" role="status"></p></section>
-  <div class="caps">
-    ${d.plats.ig.mode!=='off'?`<div class="capb">${pbx('ig')}${ta('ig','Instagram caption',2200)}</div>`:''}
-    ${d.plats.fb.mode!=='off'?`<div class="capb">${pbx('fb')}<div class="capw">${ta('fb','Facebook caption',5000)}${d.plats.ig.mode!=='off'?`<button type="button" class="linkbtn sm" data-same="fb">Same as Instagram</button>`:''}</div></div>`:''}
-    ${d.plats.yt.mode!=='off'?`<div class="capb">${pbx('yt')}<div class="capw"><label class="fld">YouTube title<input data-cap="yt" data-f="title" maxlength="100" value="${esc(d.plats.yt.title||'')}"><span class="cnt" data-cnt="yttitle">${(d.plats.yt.title||'').length} / 100</span></label>${ta('yt','YouTube description',5000,'cap',4)}</div></div>`:''}
-    ${d.plats.li.mode!=='off'?`<div class="capb">${pbx('li')}${ta('li','LinkedIn post (English)',3000)}</div>`:''}
-  </div>`:''}
-  <div class="cap">When</div>
-  <div class="whens" role="radiogroup" aria-label="When to post">
-    <button type="button" class="whn" data-when="now" aria-pressed="${!d.when}"><span>Right away</span><b>After approval</b></button>
-    <button type="button" class="whn" data-when="${esc(t730.toISOString())}" aria-pressed="${!!d.when&&!isPick}"><span>Best time</span><b>${t730.getDate()===now.getDate()?'Today':'Tomorrow'} 7:30 pm</b></button>
-    <label class="whn ${isPick?'on':''}"><span>Pick date &amp; time</span><input type="datetime-local" id="pWhen" value="${isPick?local(d.when):''}" min="${local(now.toISOString())}"></label>
-  </div>
-  <p class="err" id="pErr" role="alert"></p>
-  <div class="pacts">
-    <button type="button" class="abtn a-good big" id="pGo">${firstBtn}</button>
-    <button type="button" class="abtn a-ghost big" id="pSave">Save draft</button>
-    ${p&&own&&['pending','approved','scheduled'].includes(p.status)&&p.byId!==PUB().me?`<button type="button" class="abtn a-ghost big" id="pSendBack">Send back with a note</button>`:''}
-    ${p?`<button type="button" class="abtn a-ghost big danger" id="pDel">Remove post</button>`:''}
-  </div>
-  <p class="sub" style="text-align:center;margin-top:10px">${own?'You are an Owner: your OK is the approval.':'Nothing is posted until an Owner approves.'}</p>`;
 }
 function pubDetailView(){
   const p=(PUB().posts||[]).find(x=>x.id===PV.id);
@@ -1310,51 +1415,6 @@ function pubAskNote(cb){
   $('#nbCancel').onclick=()=>dlg.close();
   $('#nbForm').onsubmit=e=>{e.preventDefault();const n=$('#nbNote').value.trim();dlg.close();cb(n)};
   dlg.showModal();
-}
-function afterPublish(){
-  const v=$('#view');
-  const back=$('#pBack');if(back)back.onclick=()=>{PV={mode:'list'};render();window.scrollTo(0,0)};
-  v.querySelectorAll('[data-pid]').forEach(b=>b.addEventListener('click',()=>{pubOpen(b.dataset.pid);render();window.scrollTo(0,0)}));
-  v.querySelectorAll('[data-pnew]').forEach(b=>b.addEventListener('click',()=>{pubNew(b.dataset.pnew);render();window.scrollTo(0,0)}));
-  v.querySelectorAll('[data-pok]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Tap again to approve'))return;pubCall({op:'approve',id:b.dataset.pok},b,()=>render())}));
-  v.querySelectorAll('[data-pback]').forEach(b=>b.addEventListener('click',()=>pubAskNote(n=>pubCall({op:'sendback',id:b.dataset.pback,note:n},b,()=>render()))));
-  if(PV.mode==='edit') afterPubEdit();
-  if(PV.mode==='view'){
-    const p=(PUB().posts||[]).find(x=>x.id===PV.id);if(!p)return;
-    v.querySelectorAll('[data-mcopy]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.mcopy;copyText((k==='yt'?(p.plats.yt.title||p.title)+'\n\n':'')+(p.plats[k].cap||'')).then(ok=>{b.textContent=ok?'✓ Copied':'Copy failed'})}));
-    v.querySelectorAll('[data-mdone]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Posted? Tap again'))return;pubCall({op:'manualDone',id:p.id,plat:b.dataset.mdone},b,()=>render())}));
-    const rt=$('#pRetry');if(rt)rt.onclick=()=>pubCall({op:'retry',id:p.id},rt,()=>render());
-    const rf=$('#pRefresh');if(rf)rf.onclick=()=>pubCall({op:'list'},rf,()=>render());
-    const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:p.id,note:n},sb,()=>render()));
-    const dl=$('#pDel');if(dl)dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:p.id},dl,()=>{PV={mode:'list'};render()})};
-  }
-}
-function afterPubEdit(){
-  const d=PV.d,v=$('#view');
-  const t=$('#pTitle');t.addEventListener('input',()=>{d.title=t.value});
-  const sc=$('#pScript');sc.addEventListener('change',()=>{d.scriptId=sc.value;const x=(DATA.scripts||[]).find(s=>s.id===sc.value);if(x&&/^yes/i.test(String(x.ai_label)))d.ai=true;render()});
-  const ai=$('#pAi');ai.addEventListener('change',()=>{d.ai=ai.checked});
-  v.querySelectorAll('[data-seg]').forEach(b=>b.addEventListener('click',()=>{d.plats[b.dataset.seg].mode=b.dataset.m;render()}));
-  v.querySelectorAll('[data-cap]').forEach(el=>el.addEventListener('input',()=>{d.plats[el.dataset.cap][el.dataset.f]=el.value;const c=v.querySelector(`[data-cnt="${el.dataset.cap}${el.dataset.f}"]`);if(c)c.textContent=el.value.length+' / '+el.maxLength}));
-  v.querySelectorAll('[data-same]').forEach(b=>b.addEventListener('click',()=>{d.plats[b.dataset.same].cap=d.plats.ig.cap;render()}));
-  v.querySelectorAll('[data-when]').forEach(b=>b.addEventListener('click',()=>{d.when=b.dataset.when==='now'?'':b.dataset.when;render()}));
-  const pw=$('#pWhen');pw.addEventListener('change',()=>{if(!pw.value)return;const x=new Date(pw.value);if(isNaN(x)||x<new Date()){$('#pErr').textContent='Pick a time in the future.';return}d.when=x.toISOString();render()});
-  const us=$('#pUseScript');if(us)us.onclick=()=>{const x=(DATA.scripts||[]).find(s=>s.id===d.scriptId);if(!x)return;
-    ['ig','fb'].forEach(k=>{if(!d.plats[k].cap)d.plats[k].cap=x.caption||''});if(!d.plats.yt.title)d.plats.yt.title=String(x.title||'').slice(0,90)+' #Shorts';if(!d.plats.yt.cap)d.plats.yt.cap=x.caption||'';render();
-    const m=$('#pAiMsg');if(m)m.textContent='Script caption added to empty boxes. LinkedIn needs English: write it or use Auto-write.'};
-  const ag=$('#pAiGo');if(ag)ag.onclick=()=>{const has=PKEYS.some(k=>d.plats[k].mode!=='off'&&d.plats[k].cap);if(has&&!confirmInline(ag,'Replaces captions. Tap again'))return;
-    pubCall({op:'caption',title:d.title,fileName:d.file.name,scriptId:d.scriptId,ai:d.ai},ag,r=>{const c=r.caps;d.plats.ig.cap=c.ig;d.plats.fb.cap=c.fb;d.plats.li.cap=c.li;d.plats.yt.title=c.yt_title;d.plats.yt.cap=c.yt_desc;
-      if(DATA.pub&&DATA.pub.conn)DATA.pub.conn.aiMonth=r.month;render();const m=$('#pAiMsg');if(m)m.textContent='✓ Written. This cost ₹'+r.cost+'. Check and edit before sending.'})};
-  const payload=()=>({title:d.title,scriptId:d.scriptId,ai:d.ai,when:d.when,plats:d.plats,fileId:d.fileId});
-  const done=r=>{PV={mode:'view',id:r.id};const p=(PUB().posts||[]).find(x=>x.id===r.id);if(p&&['draft','sentback','pending'].includes(p.status))PV={mode:'list'};render();window.scrollTo(0,0)};
-  const check=()=>{const on=PKEYS.filter(k=>d.plats[k].mode!=='off');if(!on.length)return 'Turn on at least one platform.';
-    const miss=on.filter(k=>d.plats[k].mode==='auto'&&!(k==='yt'?d.plats.yt.title:d.plats[k].cap));if(miss.length)return 'Add a '+(miss[0]==='yt'?'YouTube title':PB[miss[0]][2]+' caption')+' first.';
-    if(d.when&&new Date(d.when)<new Date())return 'The time you picked has passed. Pick again.';return ''};
-  $('#pGo').onclick=()=>{const e=check();if(e){$('#pErr').textContent=e;return}const b=$('#pGo');if(CAN('approve')&&!confirmInline(b,'Tap again to approve'))return;
-    pubCall({op:CAN('approve')?'approve':'submit',id:PV.id,post:payload()},b,done)};
-  $('#pSave').onclick=()=>pubCall({op:'save',id:PV.id,post:payload()},$('#pSave'),r=>{PV={mode:'list'};render();window.scrollTo(0,0)});
-  const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:PV.id,note:n},sb,()=>{PV={mode:'list'};render()}));
-  const dl=$('#pDel');if(dl)dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:PV.id},dl,()=>{PV={mode:'list'};render()})};
 }
 function websiteView(){
   if(!WEB_ON) return `<section class="panel"><h2>Website analytics</h2><p class="sub">Visitors, pages and where they come from (Google Analytics)</p>
@@ -1404,7 +1464,8 @@ function render(){
   catch(err){ $('#view').innerHTML=`<section class="panel">${empty('Could not show this screen: '+esc(err.message))}</section>`; }
   document.querySelectorAll('#bnav button').forEach(x=>x.setAttribute('aria-current',x.dataset.tab===state.tab?'page':'false'));
   const plat={team:'Team',instagram:'Instagram',facebook:'Facebook',ads:'Meta Ads',youtube:'YouTube',website:'Website',posts:'All posts',audience:'Audience'}[state.tab];
-  $('#backRow').hidden=!plat; $('#backTitle').textContent=plat||'';
+  const pk2={instagram:'ig',facebook:'fb',ads:'ads',youtube:'yt',website:'web'}[state.tab];
+  $('#backRow').hidden=!plat; $('#backTitle').innerHTML=plat?(pk2?pbadge(pk2):'')+'<span>'+esc(plat)+'</span>':'';
   window.scrollTo(0,keepY);
 }
 const goTab=t=>{if(!views[t]||!allowed(t))return;state.tab=t;save();render();window.scrollTo({top:0,behavior:'smooth'})};
