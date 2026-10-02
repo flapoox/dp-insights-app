@@ -1,0 +1,18 @@
+<div id="gate" hidden>
+  <form class="gate-card" id="gateForm" autocomplete="off">
+    <img src="icon-192.png" alt="Digital Poonam">
+    <h2>DP Insights</h2>
+    <p id="gateMsg">Enter your PIN to open the dashboard.</p>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" aria-label="PIN" required minlength="6">
+    <button id="gateBtn" type="submit">Open</button>
+    <div class="gate-err" id="gateErr" role="alert"></div>
+  </form>
+</div>
+<div id="updBar" hidden role="status" aria-live="polite">
+  <div class="u-txt"><b id="updTitle">Update available</b><span id="updSub">A new version of DP Insights is ready.</span><ul id="updNotes"></ul></div>
+  <button type="button" class="u-later" id="updLater">Later</button>
+  <button type="button" class="u-go" id="updGo">Update</button>
+</div>
+<script src="config.js"></script>
+<script src="boot.js"></script>
+</body></html>

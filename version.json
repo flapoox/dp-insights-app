@@ -1,10 +1,9 @@
 {
-  "version": "2.7",
-  "date": "2026-09-28",
+  "version": "3.2",
+  "date": "2026-10-02",
   "notes": [
-    "Swipe the big card left/right: Instagram, Meta Ads, Facebook, YouTube",
-    "Bottom bar now on bigger phones too: Home, Channels, Competition, Scripts",
-    "Every channel screen opens with its summary card",
-    "Cleaner header, no long sync messages"
+    "Publish: one video to Instagram, Facebook, YouTube and LinkedIn",
+    "Owner approval before anything goes live, with Send back notes",
+    "Auto-write captions (Claude) with the cost shown"
   ]
 }

@@ -27,7 +27,7 @@ for(let i=DAYS-1;i>=0;i--){ const d=new Date(END); d.setDate(END.getDate()-i);
   KEYS.forEach(k=>{ const v=src[k]; o[k] = (v===null||v===undefined||v==='')?null:Number(v); }); days.push(o); }
 
 const state={tab:'home',range:30,yt:'all'};
-try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt;if(s.cw)state.cw=s.cw;if(s.hp)state.hp=s.hp}catch(e){}
+try{const s=JSON.parse(localStorage.getItem('dpi-live')||'{}');if(s.tab)state.tab=s.tab;if(s.range)state.range=s.range;if(s.yt)state.yt=s.yt;if(s.cw)state.cw=s.cw;if(s.hp)state.hp=s.hp;if(s.pr)state.pr=s.pr;if(s.pm)state.pm=s.pm}catch(e){}
 const save=()=>{try{localStorage.setItem('dpi-live',JSON.stringify(state))}catch(e){}};
 
 function slice(n,offset=0){return days.slice(DAYS-n*(offset+1),DAYS-n*offset)}
@@ -48,7 +48,7 @@ function delta(cur,prev,invert=false){
   if(cur==null||prev==null||!prev) return '<span class="delta flat">No earlier data to compare</span>';
   const ch=(cur-prev)/Math.abs(prev)*100, good=invert?ch<0:ch>0;
   const cls=Math.abs(ch)<0.5?'flat':good?'up':'down';
-  return `<span class="delta ${cls}">${ch>0?'▲':'▼'} ${Math.abs(ch).toFixed(1)}% <span style="color:var(--muted);font-weight:400">vs prev ${state.range}d</span></span>`;
+  return `<span class="delta ${cls}">${ch>0?'▲':'▼'} ${Math.abs(ch).toFixed(1)}%</span><span class="flat" style="font-size:11.5px">vs previous ${state.range} days</span>`;
 }
 function kpi(label,cur,prev,fmt,sparkVals,color,invert){
   const vals=(sparkVals||[]).map(v=>v==null?0:v);
@@ -57,128 +57,179 @@ function kpi(label,cur,prev,fmt,sparkVals,color,invert){
 }
 const empty=(msg)=>`<p class="sub" style="margin:0;padding-block:24px;text-align:center">${msg}</p>`;
 
-/* ---------- chart primitives ---------- */
+/* ---------- chart primitives (3.0: bars only, brand orange) ---------- */
+// small bar sparkline: last bar strong, others faded
 function spark(values,color){
-  const w=200,h=34,mn=Math.min(...values),mx=Math.max(...values),r=mx-mn||1;
-  const pts=values.map((v,i)=>[i/(values.length-1)*w,h-3-(v-mn)/r*(h-8)]);
-  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join('');
-  const last=pts[pts.length-1];
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:34px" aria-hidden="true">
-    <path d="${line} L${w} ${h} L0 ${h}Z" fill="${color}" opacity=".12"/>
-    <path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
-    <circle cx="${last[0]}" cy="${last[1]}" r="2.6" fill="${color}"/></svg>`;
+  const v=values.map(x=>x==null||isNaN(x)?0:+x), n=v.length; if(n<2) return '';
+  const w=200,h=34,gap=n>20?2:4,bw=(w-gap*(n-1))/n,mx=Math.max(...v),mn=Math.min(...v)*0.6,r=(mx-mn)||1;
+  const c=css('--accent');
+  return `<svg class="mini" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${v.map((x,i)=>{const bh=Math.max(3,(x-mn)/r*(h-2));
+    return `<rect x="${(i*(bw+gap)).toFixed(1)}" y="${(h-bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="${Math.min(3,bw/2).toFixed(1)}" fill="${c}" fill-opacity="${i===n-1?1:.38}"/>`}).join('')}</svg>`;
 }
 function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v||1)));const f=v/e;return(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e}
 function axisTicks(max){const m=niceMax(max);return[0,m/4,m/2,m*3/4,m].map(v=>({v,m}))}
 
-function lineChart(host,rows,series,fmt,opts={}){
-  const W=720,H=opts.h||240,P={l:52,r:14,t:10,b:26};
-  const iw=W-P.l-P.r, ih=H-P.t-P.b;
-  const max=niceMax(Math.max(...series.flatMap(s=>rows.map(r=>s.get(r)))));
-  const x=i=>P.l+(rows.length===1?iw/2:i/(rows.length-1)*iw), y=v=>P.t+ih-v/max*ih;
-  const ticks=[0,.25,.5,.75,1].map(f=>f*max);
-  const step=Math.max(1,Math.ceil(rows.length/6));
-  let g=ticks.map(t=>`<line x1="${P.l}" x2="${W-P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${P.l-8}" y="${y(t)+3.5}" text-anchor="end">${compact(t)}</text>`).join('');
-  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>`;
-  rows.forEach((r,i)=>{if(i%step===0||i===rows.length-1&&rows.length<10)g+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${dlabel(r.d)}</text>`});
-  series.forEach(s=>{
-    const d=rows.map((r,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(s.get(r)).toFixed(1)).join('');
-    if(opts.area) g+=`<path d="${d} L${x(rows.length-1)} ${y(0)} L${x(0)} ${y(0)}Z" fill="${s.color}" opacity=".10"/>`;
-    g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-    const li=rows.length-1;
-    g+=`<circle cx="${x(li)}" cy="${y(s.get(rows[li]))}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
-  });
-  g+=`<line class="xh" y1="${P.t}" y2="${P.t+ih}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
-  g+=series.map((s,k)=>`<circle class="hd hd${k}" r="4.5" fill="${s.color}" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`).join('');
-  g+=`<rect class="hit" x="${P.l}" y="${P.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
-  host.innerHTML=`<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.label||''}">${g}</svg><div class="tip" hidden></div></div>`;
-  const svg=host.querySelector('svg'),tip=host.querySelector('.tip'),xh=svg.querySelector('.xh');
-  const move=e=>{
-    const b=svg.getBoundingClientRect(),sx=(e.clientX-b.left)/b.width*W;
-    const i=Math.max(0,Math.min(rows.length-1,Math.round((sx-P.l)/iw*(rows.length-1))));
-    xh.setAttribute('x1',x(i));xh.setAttribute('x2',x(i));xh.setAttribute('visibility','visible');
-    series.forEach((s,k)=>{const c=svg.querySelector('.hd'+k);c.setAttribute('cx',x(i));c.setAttribute('cy',y(s.get(rows[i])));c.setAttribute('visibility','visible')});
-    tip.innerHTML=`<b>${dlabel(rows[i].d)} ${rows[i].d.getFullYear()}</b>`+series.map(s=>`<div class="row"><span class="sw" style="background:${s.color}"></span>${s.name}: <b>${fmt(s.get(rows[i]))}</b></div>`).join('');
-    tip.hidden=false;
-    const top=Math.min(...series.map(s=>y(s.get(rows[i]))));
-    let left=x(i)/W*b.width; left=Math.max(80,Math.min(b.width-80,left));
-    tip.style.left=left+'px';tip.style.top=(top/H*b.height)+'px';
-  };
-  const leave=()=>{tip.hidden=true;xh.setAttribute('visibility','hidden');svg.querySelectorAll('.hd').forEach(c=>c.setAttribute('visibility','hidden'))};
-  svg.addEventListener('pointermove',move);svg.addEventListener('pointerleave',leave);
-}
-
-function barChart(host,rows,get,color,fmt,opts={}){
-  const W=720,H=opts.h||220,P={l:52,r:14,t:10,b:26};
+// Stacked/simple bar chart for white panels. series: [{name,get}] ; first series in brand orange.
+function stackBars(host,rows,series,fmt,opts={}){
+  const W=720,H=opts.h||230,P={l:46,r:8,t:12,b:26};
   const iw=W-P.l-P.r, ih=H-P.t-P.b, n=rows.length;
-  const max=niceMax(Math.max(...rows.map(get)));
-  const bw=iw/n, gap=Math.min(2,bw*0.25), w=Math.max(1,bw-gap);
+  const cols=[css('--accent'),css('--ink-2'),css('--muted')];
+  const tot=r=>series.reduce((s,x)=>s+(+x.get(r)||0),0);
+  const max=niceMax(Math.max(1,...rows.map(tot)));
+  const bw=iw/n, gap=Math.max(1,Math.min(8,bw*0.28)), w=Math.max(1,bw-gap);
   const y=v=>P.t+ih-v/max*ih;
   const step=Math.max(1,Math.ceil(n/6));
-  let g=[0,.25,.5,.75,1].map(f=>f*max).map(t=>`<line x1="${P.l}" x2="${W-P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${P.l-8}" y="${y(t)+3.5}" text-anchor="end">${opts.tick?opts.tick(t):compact(t)}</text>`).join('');
-  const r=Math.min(4,w/2);
+  let g=[0,.5,1].map(f=>f*max).map(t=>`<line x1="${P.l}" x2="${W-P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${P.l-8}" y="${y(t)+3.5}" text-anchor="end">${opts.tick?opts.tick(t):compact(t)}</text>`).join('');
+  const rr=Math.min(5,w/2);
   rows.forEach((row,i)=>{
-    const v=get(row), x0=P.l+i*bw+gap/2, y0=y(v), h=P.t+ih-y0;
-    const rr=Math.min(r,h);
-    g+=`<path class="b" data-i="${i}" d="M${x0} ${P.t+ih} V${y0+rr} Q${x0} ${y0} ${x0+rr} ${y0} H${x0+w-rr} Q${x0+w} ${y0} ${x0+w} ${y0+rr} V${P.t+ih}Z" fill="${color}"/>`;
-    if(i%step===0) g+=`<text x="${x0+w/2}" y="${H-6}" text-anchor="middle">${dlabel(row.d)}</text>`;
+    const x0=P.l+i*bw+gap/2; let base=0;
+    series.forEach((s,k)=>{const v=+s.get(row)||0; if(v<=0) return; const y1=y(base+v), y0=y(base), h=y0-y1; const top=k===series.length-1||series.slice(k+1).every(z=>!(+z.get(row)>0));
+      const r=top?Math.min(rr,h):0;
+      g+=`<path class="b b${i}" d="M${x0} ${y0} V${y1+r} Q${x0} ${y1} ${x0+r} ${y1} H${x0+w-r} Q${x0+w} ${y1} ${x0+w} ${y1+r} V${y0}Z" fill="${cols[k%cols.length]}"/>`; base+=v;});
+    if(i%step===0||i===n-1&&n<=8) g+=`<text x="${x0+w/2}" y="${H-6}" text-anchor="middle">${dlabel(row.d)}</text>`;
   });
-  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>`;
   g+=`<rect class="hit" x="${P.l}" y="${P.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
   host.innerHTML=`<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.label||''}">${g}</svg><div class="tip" hidden></div></div>`;
-  const svg=host.querySelector('svg'),tip=host.querySelector('.tip'),bars=[...svg.querySelectorAll('.b')];
-  svg.addEventListener('pointermove',e=>{
+  const svg=host.querySelector('svg'),tip=host.querySelector('.tip');
+  const show=e=>{
     const b=svg.getBoundingClientRect(),sx=(e.clientX-b.left)/b.width*W;
     const i=Math.max(0,Math.min(n-1,Math.floor((sx-P.l)/bw)));
-    bars.forEach((el,k)=>el.setAttribute('opacity',k===i?1:.45));
-    tip.innerHTML=`<b>${dlabel(rows[i].d)}</b><div>${opts.name||''}: <b>${fmt(get(rows[i]))}</b></div>`;tip.hidden=false;
-    let left=(P.l+i*bw+bw/2)/W*b.width;left=Math.max(70,Math.min(b.width-70,left));
-    tip.style.left=left+'px';tip.style.top=(y(get(rows[i]))/H*b.height)+'px';
-  });
-  svg.addEventListener('pointerleave',()=>{tip.hidden=true;bars.forEach(el=>el.setAttribute('opacity',1))});
+    svg.querySelectorAll('.b').forEach(el=>el.setAttribute('opacity',el.classList.contains('b'+i)?1:.4));
+    tip.innerHTML=`<b>${dlabel(rows[i].d)} ${rows[i].d.getFullYear()}</b>`+series.map((s,k)=>`<div class="row"><span class="sw" style="background:${cols[k%cols.length]}"></span>${s.name}: <b>${fmt(+s.get(rows[i])||0)}</b></div>`).join('');
+    tip.hidden=false;
+    let left=(P.l+i*bw+bw/2)/W*b.width;left=Math.max(80,Math.min(b.width-80,left));
+    tip.style.left=left+'px';tip.style.top=(y(tot(rows[i]))/H*b.height)+'px';
+  };
+  svg.addEventListener('pointermove',show);svg.addEventListener('pointerdown',show);
+  svg.addEventListener('pointerleave',()=>{tip.hidden=true;svg.querySelectorAll('.b').forEach(el=>el.setAttribute('opacity',1))});
 }
+// old names kept so every screen draws bars now
+function lineChart(host,rows,series,fmt,opts={}){ stackBars(host,rows,series.slice(0,3),fmt,opts); }
+function barChart(host,rows,get,color,fmt,opts={}){ stackBars(host,rows,[{name:opts.name||'',get}],fmt,opts); }
 
+// Black card bars you can tap. items:[{v,label,on,best,tip}] ; returns html. onPick handled by caller via data-i.
+function tapBars(items,opts={}){
+  const vals=items.map(x=>x.v==null||isNaN(x.v)?0:+x.v), mx=Math.max(1,...vals), mn=Math.min(0,...vals);
+  const H=opts.sm?70:120, dense=items.length>14;
+  return `<div class="bc-bars${opts.sm?' sm':''}${dense?' bc-dense':''}" role="group" aria-label="${esc(opts.label||'Bars')}">${items.map((x,i)=>{
+    const h=Math.max(5,Math.round((vals[i]-mn)/((mx-mn)||1)*H));
+    return `<button type="button" class="bc-b${x.on?' on':''}${x.best&&!x.on?' best':''}" data-i="${i}" aria-label="${esc(x.aria||'')}" aria-pressed="${x.on?'true':'false'}"><span>${esc(x.tip||'')}</span><i data-h="${h}" style="height:${opts.grow?4:h}px"></i></button>`}).join('')}</div>
+  <div class="bc-lab" aria-hidden="true">${items.map(x=>`<span class="${x.on?'on':''}">${esc(x.label||'')}</span>`).join('')}</div>`;
+}
+function growBars(root){ requestAnimationFrame(()=>requestAnimationFrame(()=>root.querySelectorAll('.bc-b i[data-h]').forEach(i=>i.style.height=i.dataset.h+'px'))); }
 
 
 /* ---------- views ---------- */
 
+/* ---------- Instagram / Facebook: filter, tappable bars, day boxes ---------- */
+const PDEF={
+  ig:{name:'Instagram',plat:'Instagram',F:'ig_followers',
+    metrics:[['reach','Reach','ig_reach'],['views','Views','ig_views'],['net','New followers',null],['eng','Interactions','ig_interactions']],
+    net:r=>r.ig_follows==null?null:(r.ig_follows||0)-(r.ig_unfollows||0),
+    boxes:[['Reach','ig_reach'],['Views','ig_views'],['Followers','F'],['Interactions','ig_interactions'],['Profile visits','ig_profile_views'],['Link taps','ig_link_taps']]},
+  fb:{name:'Facebook',plat:'Facebook',F:'fb_followers',
+    metrics:[['reach','Reach','fb_reach'],['views','Views','fb_views'],['net','New follows',null],['eng','Engagements','fb_engagements']],
+    net:r=>r.fb_new_follows,
+    boxes:[['Reach','fb_reach'],['Views','fb_views'],['Followers','F'],['Engagements','fb_engagements']]}
+};
+if(!['d',7,30].includes(state.pr)) state.pr=7;
+if(!state.pm) state.pm='reach';
+const WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const dfull=d=>WD[d.getDay()]+', '+dlabel(d);
+const pctCh=(a,b)=>a==null||b==null||!b?null:(a-b)/Math.abs(b)*100;
+function pchip(p,vs){if(p==null) return `<span class="dp flat">No earlier data</span>`;
+  const up=p>=0;return `<span class="dp ${Math.abs(p)<0.5?'flat':up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(p).toFixed(Math.abs(p)<10?1:0)}%</span><span class="vs">${vs}</span>`}
 function platform(which){
-  const ig=which==='ig', c=slice(state.range),p=slice(state.range,1),w=buckets();
-  const K=ig?{reach:'ig_reach',views:'ig_views',eng:'ig_interactions',F:'ig_followers'}:{reach:'fb_reach',views:'fb_views',eng:'fb_engagements',F:'fb_followers'};
-  const color=ig?'var(--ig)':'var(--fb)';
-  const net=a=>ig?(has(a,'ig_follows')?S(a,'ig_follows')-(S(a,'ig_unfollows')||0):null):S(a,'fb_new_follows');
-  const er=a=>{const e=S(a,K.eng),r=S(a,K.reach);return e!=null&&r?e/r*100:null};
-  const posts=(DATA.posts||[]).filter(x=>x.platform===(ig?'Instagram':'Facebook'));
+  const P=PDEF[which], mode=state.pr, isDay=mode==='d', n=isDay?7:mode;
+  const mdef=P.metrics.find(m=>m[0]===state.pm)||P.metrics[0];
+  const val=(r,k)=>k==='net'?P.net(r):r[k];
+  const mkey=mdef[0]==='net'?'net':mdef[2];
+  const win=days.slice(DAYS-n), prevWin=days.slice(DAYS-2*n,DAYS-n);
+  if(state.psel==null||state.psel>=n) state.psel=n-1;
+  const sel=isDay?n-1:state.psel, day=win[sel], prev=days[DAYS-n+sel-1];
+  const lastLabel=(()=>{const t=new Date();t.setHours(0,0,0,0);const y=new Date(t);y.setDate(t.getDate()-1);return ymd(END)===ymd(y)?'Yesterday':dlabel(END)})();
+  const sumOf=(a,k)=>{let t=0,any=false;a.forEach(r=>{const v=val(r,k);if(v!=null){t+=v;any=true}});return any?t:null};
+  // summary card
+  let sLabel,sRange,sVal,sP,sNote;
+  const postsOf=d=>(DATA.posts||[]).filter(x=>x.platform===P.plat&&String(x.date).slice(0,10)===ymd(d));
+  const reelsIn=a=>a.reduce((t,r)=>t+postsOf(r.d).filter(x=>/reel|video/i.test(x.format)).length,0);
+  if(isDay){
+    const rk=P.metrics[0][2]; sLabel='Reach · '+lastLabel.toLowerCase(); sRange=dfull(day.d);
+    sVal=day[rk]; sP=pctCh(day[rk],prev&&prev[rk]);
+    const np=postsOf(day.d).length, nf=P.net(day);
+    sNote=`${np} post${np===1?'':'s'} that day${nf!=null?` · ${nf>=0?'+':''}${num(nf)} followers`:''} · data syncs every morning`;
+  } else {
+    const t=sumOf(win,mkey), pt=sumOf(prevWin,mkey);
+    sLabel=mdef[1]+' · last '+n+' days'; sRange=dlabel(win[0].d)+' – '+dlabel(win[n-1].d);
+    sVal=t; sP=pctCh(t,pt);
+    const nf=sumOf(win,'net');
+    sNote=`${reelsIn(win)} Reels/videos posted${nf!=null?` · ${nf>=0?'+':''}${num(nf)} followers`:''}`;
+  }
+  const big=v=>v==null?'—':(mdef[0]==='net'&&!isDay&&v>0?'+':'')+num(v);
+  const sum=`<section class="psum"><div class="ps-top"><span>${sLabel}</span><span>${sRange}</span></div>
+    <div class="ps-main"><span class="ps-big">${big(sVal)}</span>${sP==null?'':`<span class="ps-d ${Math.abs(sP)<0.5?'flat':sP>0?'up':'down'}">${sP>0?'▲':'▼'} ${Math.abs(sP).toFixed(Math.abs(sP)<10?1:0)}% ${isDay?'vs day before':'vs previous '+n+' days'}</span>`}</div>
+    <div class="ps-note">${sNote}</div></section>`;
+  // bar chart
+  let chart='';
+  if(!isDay){
+    const vals=win.map(r=>val(r,mkey)), have=vals.some(v=>v!=null);
+    const vv=vals.map(v=>v==null?-Infinity:v), bi=vv.indexOf(Math.max(...vv));
+    const lv=vals.map(v=>v==null?Infinity:v), li=lv.indexOf(Math.min(...lv));
+    const items=win.map((r,i)=>({v:vals[i],on:i===sel,best:i===bi,tip:vals[i]==null?'—':compact(vals[i]),
+      label:n===7?WD[r.d.getDay()]:((i%5===0||i===n-1)?String(r.d.getDate()):''),aria:dfull(r.d)+': '+(vals[i]==null?'no data':num(vals[i]))}));
+    chart=`<section class="dkcard bchart" style="margin-top:12px">
+      <div class="bc-chips" role="group" aria-label="What the bars show">${P.metrics.map(m=>`<button type="button" data-pm="${m[0]}" aria-pressed="${m[0]===mdef[0]}">${m[1]}</button>`).join('')}</div>
+      <div class="bc-hint">Tap a bar to see that day</div>
+      ${have?tapBars(items,{label:mdef[1]+' per day',grow:state._grow}):`<p class="bc-hint" style="padding:30px 0;text-align:center">No ${mdef[1].toLowerCase()} data yet.</p>`}
+      ${have?`<div class="bc-foot"><span>Best: <b class="g">${dfull(win[bi].d)} (${compact(vals[bi])})</b></span><span>Lowest: <b class="r">${dfull(win[li].d)} (${compact(vals[li])})</b></span></div>`:''}
+    </section>`;
+  }
+  // day boxes
+  const pool=isDay?days.slice(DAYS-7):win;
+  const tag=k=>{if(isDay) return '';const a=pool.map(r=>r[k]).filter(v=>v!=null);if(a.length<3||day[k]==null) return '';
+    if(day[k]===Math.max(...a)) return `<span class="tg hi">● Highest in ${n} days</span>`;
+    if(day[k]===Math.min(...a)) return `<span class="tg lo">● Lowest in ${n} days</span>`;return ''};
+  const vsT=isDay?'vs day before':'vs day before';
+  const boxes=P.boxes.map(([lab,k])=>{
+    if(k==='F'){const f=day[P.F], nf=P.net(day);
+      return `<div class="dbox"><span class="k">${lab}</span><span class="v">${f==null?'—':num(f)}</span><span class="dp ${nf==null?'flat':nf>=0?'up':'down'}">${nf==null?'No data':(nf>=0?'+':'')+num(nf)}</span><span class="vs">${nf==null?'':'new this day'}</span><span class="tg"></span></div>`}
+    const v=day[k];
+    return `<div class="dbox"><span class="k">${lab}</span><span class="v">${v==null?'—':num(v)}</span>${v==null?'<span class="dp flat">Not available</span>':pchip(pctCh(v,prev&&prev[k]),vsT)}${tag(k)||'<span class="tg"></span>'}</div>`}).join('');
+  const dp=postsOf(day.d);
+  const postsHtml=`<section class="panel dposts"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Posted this day</h2><span class="pill">${dp.length} post${dp.length===1?'':'s'}</span></div>
+    ${dp.length?dp.map(x=>`<a class="dpost" href="${esc(x.link||'#')}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${thumb(x,'sm')}<span class="t"><b>${esc(String(x.text||'(no caption)').slice(0,80))}</b><span>${esc(x.format)}</span></span><span class="r"><b>${x.reach!=null?compact(x.reach):'—'}</b><span>reach</span></span></a>`).join('')
+      :`<p class="sub" style="margin:8px 0 0">Nothing posted. Reach came from older posts.</p>`}</section>`;
+  // suggestion
+  const rk=P.metrics[0][2], avgR=(()=>{const a=pool.map(r=>r[rk]).filter(v=>v!=null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null})();
+  const diff=avgR&&day[rk]!=null?Math.round((day[rk]-avgR)/avgR*100):null;
+  const reels=dp.filter(x=>/reel|video/i.test(x.format)).length;
+  let tipT='Keep posting at the times your audience is online (see Audience).';
+  if(diff!=null){
+    if(!reels&&diff<0) tipT=`No Reel this day, and reach was ${Math.abs(diff)}% below your average. Days with a Reel usually reach more people.`;
+    else if(diff>=15) tipT=`Strong day: reach ${diff}% above your average. Make one more post in the same format this week.`;
+    else if(diff<=-15) tipT=`Reach ${Math.abs(diff)}% below average${reels?' even with a Reel':''}. Try a stronger hook in the first 2 seconds, or post in the evening.`;
+    else tipT=`A normal day, close to your average reach. Evening Reels tend to do best.`;
+  }
+  const tip=`<div class="ptip"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path></svg></span><div><b>Suggestion</b><span>${tipT}</span></div></div>`;
+  const posts=(DATA.posts||[]).filter(x=>x.platform===P.plat);
+  const from=ymd(win[0].d);
   return `
-  <div class="grid kpis k4">
-    ${kpi('Followers',lastVal(c,K.F),null,num,[],color)}
-    ${kpi(ig?'New follows':'New Page follows',net(c),net(p),num,w.map(r=>ig?(r.ig_follows||0)-(r.ig_unfollows||0):r.fb_new_follows),color)}
-    ${kpi('Accounts reached',S(c,K.reach),S(p,K.reach),compact,w.map(r=>r[K.reach]),color)}
-    ${kpi('Views',S(c,K.views),S(p,K.views),compact,w.map(r=>r[K.views]),color)}
-    ${kpi(ig?'Interactions':'Engagements',S(c,K.eng),S(p,K.eng),compact,w.map(r=>r[K.eng]),color)}
-    ${kpi('Engagement rate (by reach)',er(c),er(p),v=>pct(v,2),w.map(r=>r[K.reach]?(r[K.eng]||0)/r[K.reach]*100:null),color)}
-    ${ig?kpi('Profile visits',S(c,'ig_profile_views'),S(p,'ig_profile_views'),compact,w.map(r=>r.ig_profile_views),color):''}
-    ${ig?kpi('Link-in-bio taps',S(c,'ig_link_taps'),S(p,'ig_link_taps'),num,w.map(r=>r.ig_link_taps),color):''}
-  </div>
-  <div class="grid two" style="margin-top:16px">
-    <section class="panel"><h2>Reach and views</h2><p class="sub">Per ${per()}</p>
-      <div class="legend"><span><i class="sw" style="background:${color}"></i>Views</span><span><i class="sw" style="background:var(--ink-2)"></i>Accounts reached</span></div>
-      <div id="plReach"></div></section>
-    <section class="panel"><h2>Follower count</h2><p class="sub">Recorded once a day from the day sync started</p><div id="plFol"></div></section>
-  </div>
-  <div class="section-title">Top ${ig?'Instagram':'Facebook'} posts · click to open</div>
-  ${postCards(posts.filter(x=>x.date&&String(x.date).slice(0,10)>=ymd(c[0].d)).sort((a,b)=>(+b.reach||0)-(+a.reach||0)).slice(0,4))}
-  <div class="section-title">${ig?'Instagram':'Facebook'} posts in this period · click a column to sort</div>
-  <section class="panel">${postTable(posts)}</section>`;
+  <div class="pfilter" role="group" aria-label="Period">${[['d',lastLabel],[7,'7 days'],[30,'30 days']].map(o=>`<button type="button" data-pr="${o[0]}" aria-pressed="${state.pr===o[0]}">${o[1]}</button>`).join('')}</div>
+  ${sum}${chart}
+  <div class="pday"><h2>${isDay?lastLabel+', '+dlabel(day.d):dfull(day.d)}</h2><p>${isDay?'Compared with the day before':'Compared with the day before · tap another bar to change'}</p></div>
+  <div class="dboxes">${boxes}</div>
+  ${postsHtml}${tip}
+  <div class="section-title">Top ${P.name} posts · last ${n} days</div>
+  ${postCards(posts.filter(x=>x.date&&String(x.date).slice(0,10)>=from).sort((a,b)=>(+b.reach||0)-(+a.reach||0)).slice(0,4))||`<section class="panel">${empty('No posts in this period.')}</section>`}
+  <div class="section-title">All ${P.name} posts · tap a column to sort</div>
+  <section class="panel">${postTable(posts,from)}</section>`;
 }
 function afterPlatform(which){
-  const ig=which==='ig', rows=buckets(), c=slice(state.range), col=css(ig?'--ig':'--fb');
-  const rk=ig?'ig_reach':'fb_reach', vk=ig?'ig_views':'fb_views', fk=ig?'ig_followers':'fb_followers';
-  if(has(c,rk)||has(c,vk)) lineChart($('#plReach'),rows,[{name:'Views',color:col,get:r=>r[vk]||0},{name:'Reached',color:css('--ink-2'),get:r=>r[rk]||0}],num,{label:'Reach and views'});
-  else $('#plReach').innerHTML=empty('No data yet.');
-  const fr=c.filter(r=>r[fk]!=null);
-  if(fr.length>1) lineChart($('#plFol'),fr,[{name:'Followers',color:col,get:r=>r[fk]}],num,{area:true,label:'Follower count'});
-  else $('#plFol').innerHTML=empty(fr.length?`${num(fr[0][fk])} followers. The trend line appears after a few days of nightly sync.`:'Recorded from the first sync onwards.');
+  const v=$('#view');
+  v.querySelectorAll('[data-pr]').forEach(b=>b.addEventListener('click',()=>{const x=b.dataset.pr;state.pr=x==='d'?'d':+x;state.psel=null;state._grow=true;save();render();state._grow=false}));
+  v.querySelectorAll('[data-pm]').forEach(b=>b.addEventListener('click',()=>{state.pm=b.dataset.pm;state._grow=true;save();render();state._grow=false}));
+  v.querySelectorAll('.bc-b').forEach(b=>b.addEventListener('click',()=>{state.psel=+b.dataset.i;render()}));
+  growBars(v);
   bindSort();
 }
 
@@ -219,6 +270,11 @@ function oldAds(){
 }
 /* ---------- Meta Ads: scorecard, suggestions, campaigns, ad previews, actions ---------- */
 const SET=DATA.settings||{};
+/* ---------- who is signed in, and what their role allows ---------- */
+const ME=DATA.me||{name:'Owner',role:'owner',roleName:'Owner',can:{analytics:true,ads:true,adActions:true,scriptStatus:true,team:true,publish:true,approve:true}};
+const CAN=k=>!!(ME.can&&ME.can[k]);
+const TAB_NEEDS={channels:'analytics',instagram:'analytics',facebook:'analytics',youtube:'analytics',website:'analytics',posts:'analytics',audience:'analytics',ads:'ads',publish:'publish',scripts:'scriptStatus',team:'team'};
+const allowed=t=>!TAB_NEEDS[t]||CAN(TAB_NEEDS[t]);
 const META={};(DATA.adsMeta||[]).forEach(m=>META[m.ad_id]=m);
 const numv=v=>v==null||v===''?0:Number(v)||0;
 function adRows(win){return (DATA.adStats||[]).filter(r=>String(r.window)===String(win)).map(r=>{
@@ -347,7 +403,7 @@ function ads(){
   <div class="section-title">Ads · with previews</div>
   <div class="cards adcards">${M.ads.map(a=>{const m=a.m||{},on=isOn(a.eff),link=m.preview||m.permalink;
     return `<article class="pcard adcard"><div class="pc-img">${thumb({thumb:m.thumb,format:'Ad'})}<span class="tag ${a.tag[1]}">${a.tag[0]}</span>
-      <span class="pc-badge" style="background:${on?'var(--good)':'var(--muted)'}">${on?'Live':'Off'}</span></div>
+      <span class="pc-badge" style="background:${on?'#17734A':'#57534E'}">${on?'Live':'Off'}</span></div>
       <div class="pc-body"><b class="ad-name">${esc(a.name)}</b>${m.title?`<p class="pc-text" style="font-weight:600">${esc(m.title)}</p>`:''}${m.body?`<p class="pc-text">${esc(m.body)}</p>`:''}
       <p class="ad-why">${esc(a.tag[2])}</p>
       <div class="pc-stats"><span><b>${inr(a.spend)}</b> spent</span><span><b>${num(a.results)}</b> ${esc(typePlural(a.type))}</span><span><b>${a.cpr?inr2(a.cpr):'—'}</b> each</span><span><b>${a.ctr!=null?pct(a.ctr,2):'—'}</b> CTR</span><span><b>${a.freq?a.freq.toFixed(1):'—'}</b> freq</span></div>
@@ -427,13 +483,13 @@ function postCards(list){
     <div class="pc-body"><p class="pc-text">${esc(r.text||'(no caption)')}</p>
     <div class="pc-stats"><span><b>${r.reach!=null?compact(r.reach):'—'}</b> reach</span><span><b>${r.likes!=null?num(r.likes):'—'}</b> likes</span><span><b>${r.comments!=null?num(r.comments):'—'}</b> comments</span></div>
     <p class="pc-date">${dlabel(toDate(String(r.date).slice(0,10)))}</p></div></a>
-    <div class="pc-foot">${btn('🚀 Boost',{action:'boost',postId:r.id,platform:r.platform,caption:r.text,thumb:r.thumb},'a-ghost sm')}</div></div>`).join('')}</div>`;
+    ${CAN('adActions')?`<div class="pc-foot">${btn('🚀 Boost',{action:'boost',postId:r.id,platform:r.platform,caption:r.text,thumb:r.thumb},'a-ghost sm')}</div>`:''}</div>`).join('')}</div>`;
 }
 let sortKey='reach',sortDir=-1;
-function postTable(list){
-  const from=ymd(slice(state.range)[0].d);
+function postTable(list,fromDate){
+  const from=fromDate||ymd(slice(state.range)[0].d);
   const rows=list.filter(x=>x.date&&String(x.date).slice(0,10)>=from).sort((a,b)=>((a[sortKey]??-1)>(b[sortKey]??-1)?1:-1)*sortDir);
-  if(!rows.length) return empty(`No posts in the last ${state.range} days. Try a longer range.`);
+  if(!rows.length) return empty('No posts in this period. Try a longer range.');
   const cols=[['text','Post'],['platform','Platform'],['format','Format'],['date','Date'],['reach','Reach'],['views','Views'],['likes','Likes'],['comments','Comments'],['saves','Saves'],['shares','Shares'],['er','Eng. rate']];
   rows.forEach(r=>r.er=r.reach?((r.interactions!=null?+r.interactions:(+r.likes||0)+(+r.comments||0)+(+r.saves||0)+(+r.shares||0))/r.reach*100):null);
   const n=v=>v==null||v===''?'—':num(v);
@@ -482,8 +538,8 @@ function audience(){
   return `
   <div class="grid two">
     <section class="panel"><h2>Age and gender</h2><p class="sub">Instagram followers, % of total</p>
-      ${ages.length?`<div class="legend"><span><i class="sw" style="background:var(--ig)"></i>Women</span><span><i class="sw" style="background:var(--fb)"></i>Men</span></div>
-      <div class="hbars">${ages.map(a=>{const x=ag[a];return `<div class="hb"><span>${esc(a)}</span><div class="track" style="background:none"><div class="fill" style="width:${x.F/mx*100}%;background:var(--ig);border-radius:5px 0 0 5px"></div><div class="fill" style="width:${x.M/mx*100}%;background:var(--fb)"></div></div><span class="n">${((x.F+x.M+x.U)/tot*100).toFixed(1)}%</span></div>`}).join('')}</div>`:empty('Meta shares age and gender only for accounts with 100+ followers.')}</section>
+      ${ages.length?`<div class="legend"><span><i class="sw" style="background:var(--accent)"></i>Women</span><span><i class="sw" style="background:var(--ink-2)"></i>Men</span></div>
+      <div class="hbars">${ages.map(a=>{const x=ag[a];return `<div class="hb"><span>${esc(a)}</span><div class="track" style="background:none"><div class="fill" style="width:${x.F/mx*100}%;background:var(--accent);border-radius:5px 0 0 5px"></div><div class="fill" style="width:${x.M/mx*100}%;background:var(--ink-2)"></div></div><span class="n">${((x.F+x.M+x.U)/tot*100).toFixed(1)}%</span></div>`}).join('')}</div>`:empty('Meta shares age and gender only for accounts with 100+ followers.')}</section>
     <section class="panel"><h2>Top cities</h2><p class="sub">Instagram followers, % of total</p>
       ${cities.length?`<div class="hbars">${cities.map(c=>`<div class="hb"><span title="${esc(c.n)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(c.n).split(',')[0])}</span><div class="track"><div class="fill" style="width:${c.v/cities[0].v*100}%;background:var(--accent)"></div></div><span class="n">${(c.v/cTot*100).toFixed(1)}%</span></div>`).join('')}</div>`:empty('No city data yet.')}</section>
   </div>
@@ -576,7 +632,7 @@ function youtube(){
   const col=state.yt==='all'?'var(--yt)':(YCH.find(x=>x.channel_id===state.yt)||{}).color;
   const card=(cls,title,list,emptyMsg)=>`<section class="panel ins ${cls}"><h2>${title}</h2>${list.length?list.map(i=>`<div class="ins-item"><b>${esc(i.t)}</b><p>${esc(i.x)}</p></div>`).join(''):`<p class="sub">${emptyMsg}</p>`}</section>`;
   const fmtBars=(list,name)=>{const t=list.reduce((s,x)=>s+x.views,0)||1,mx=Math.max(1,...list.map(x=>x.views));
-    return list.length?`<div class="hbars">${list.slice(0,8).map(x=>`<div class="hb"><span>${esc(name[x.k]||x.k)}</span><div class="track"><div class="fill" style="width:${x.views/mx*100}%;background:${col}"></div></div><span class="n">${(x.views/t*100).toFixed(0)}%</span></div>`).join('')}</div>`:empty('Appears after the next sync.')};
+    return list.length?`<div class="hbars">${list.slice(0,8).map(x=>`<div class="hb"><span>${esc(name[x.k]||x.k)}</span><div class="track"><div class="fill" style="width:${x.views/mx*100}%;background:var(--accent)"></div></div><span class="n">${(x.views/t*100).toFixed(0)}%</span></div>`).join('')}</div>`:empty('Appears after the next sync.')};
   const top=vids.filter(v=>v.vw>0).sort((a,b)=>b.vw-a.vw);
   const errs=YCH.filter(x=>ids.includes(x.channel_id)&&String(x.status||'').startsWith('error'));
   const net=v=>v.gained==null?null:(v.gained||0)-(v.lost||0);
@@ -650,6 +706,7 @@ function scriptsView(){
     ['ANIMATION',`${cnt('ANIMATION')} for the editor`,'Fully AI-animated film with your cloned voice, like your Ganesha film. Needs 1 to 2 days, so start early.'],
     ['FACELESS',`${cnt('FACELESS')} for the editor`,'Text, b-roll or screen recording with your cloned voice. The editor can batch these in one sitting.']];
   return `
+  <div class="hhead" style="margin-bottom:14px"><div><h2 class="hello">Scripts</h2><p class="sub" style="margin:4px 0 0">${open.length} to make · newest posting dates first</p></div></div>
   <div class="grid splan">${plan.map(p=>`<div class="kpi"><div class="lbl"><span class="sw" style="background:${STYPE[p[0]].c}"></span>${STYPE[p[0]].ic} ${STYPE[p[0]].n}</div><div class="val" style="font-size:22px">${p[1]}</div><p class="sub" style="margin:6px 0 0">${p[2]}</p></div>`).join('')}</div>
   <div class="ybar" style="margin-top:16px">
     <div class="seg" id="sfSeg">${[['ALL','All'],...Object.keys(STYPE).map(k=>[k,STYPE[k].ic+' '+STYPE[k].n])].map(o=>`<button data-v="${o[0]}" aria-pressed="${state.sf===o[0]}">${o[1]}</button>`).join('')}</div>
@@ -657,8 +714,8 @@ function scriptsView(){
   </div>
   <div class="scards">${list.map(x=>{const T=STYPE[x.type]||{n:x.type,ic:'',c:'var(--muted)'};
     return `<article class="scard" data-id="${esc(x.id)}">
-      <div class="sc-top"><span class="sc-no">#${esc(x.priority)}</span><span class="sc-type" style="background:${T.c}">${T.ic} ${esc(T.n)}</span><span class="sub" style="margin:0">Post on <b>${esc(sdate(x.post_on))}</b></span>
-        <select class="sc-st" aria-label="Status">${SSTAT.map(s=>`<option ${s===x.status?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="sc-top"><span class="sc-no">#${esc(x.priority)}</span><span class="sc-type">${T.ic} ${esc(T.n)}</span><span class="sub" style="margin:0">Post on <b>${esc(sdate(x.post_on))}</b></span>
+        <select class="sc-st" aria-label="Status" ${CAN('scriptStatus')?'':'disabled'}>${SSTAT.map(s=>`<option ${s===x.status?'selected':''}>${s}</option>`).join('')}</select></div>
       <h3>${esc(x.title)}</h3>
       <p class="sc-owner">${esc(x.owner)} · ${esc(x.pillar||'')}</p>
       <blockquote>${esc(x.hook)}</blockquote>
@@ -726,13 +783,14 @@ function competition(){
   const fmtBy={};CP.filter(p=>others.includes(p.handle)&&p.date>=ymd(new Date(Date.now()-30*864e5))).forEach(p=>{const f=fmtBy[p.kind]=fmtBy[p.kind]||{n:0,hit:0};f.n++;if(p.ratio>=2)f.hit++});
   const me=CR.find(c=>c.isMe),meP=me?CP.filter(p=>p.handle===me.handle):[];
   return `
-  <p class="sub" style="margin:0 0 12px">Public data from ${CR.filter(c=>!c.isMe).length} creators you follow (Instagram business/creator accounts and YouTube). Refreshes every morning. <b>Viral</b> = a post with at least 2× that creator's usual engagement (likes + comments; views on YouTube).</p>
+  <div class="hhead"><div><h2 class="hello">Ideas</h2></div></div>
+  <p class="sub" style="margin:6px 0 12px">Public data from ${CR.filter(c=>!c.isMe).length} creators you follow (Instagram business/creator accounts and YouTube). Refreshes every morning. <b>Viral</b> = a post with at least 2× that creator's usual engagement (likes + comments; views on YouTube).</p>
   ${errs.map(c=>`<p class="note">⚠️ @${esc(c.handle)}: ${esc(c.status)}</p>`).join('')}
   <div class="ytbar"><div class="seg" id="cwSeg" aria-label="Window"><button data-v="7" aria-pressed="${W===7}">This week</button><button data-v="30" aria-pressed="${W===30}">Last 30 days</button></div>
     <span class="sub" style="margin:0">${fallback?`No 2× outliers in the last ${W} days, showing their best posts instead.`:`${viral.length} viral post${viral.length===1?'':'s'} in the last ${W} days`}</span></div>
   <div class="section-title">🔥 ${fallback?'Best performing':'Viral'} · click a card to open, copy a brief for your editor</div>
   ${viral.length?`<div class="cards compcards">${viral.slice(0,12).map((p,i)=>{const c=crOf(p.handle);return `<div class="pcard">
-    <a class="pc-link" href="${esc(p.link)}" target="_blank" rel="noopener"><div class="pc-img ${p.platform==='yt'?'yt':''}">${thumb({thumb:p.thumb,format:p.kind})}<span class="pc-badge" style="background:${p.ratio>=2?'var(--yt)':'var(--accent)'}">${p.ratio!=null?p.ratio+'× usual':''}</span><span class="pc-kind">${esc(p.kind)}</span></div>
+    <a class="pc-link" href="${esc(p.link)}" target="_blank" rel="noopener"><div class="pc-img ${p.platform==='yt'?'yt':''}">${thumb({thumb:p.thumb,format:p.kind})}<span class="pc-badge" style="background:${p.ratio>=2?'#C4221A':'#57534E'}">${p.ratio!=null?p.ratio+'× usual':''}</span><span class="pc-kind">${esc(p.kind)}</span></div>
     <div class="pc-body"><p class="pc-who">${esc(c.name||p.handle)} <span>@${esc(p.handle)}</span></p><p class="pc-text">${esc(p.text||'(no caption)')}</p>
     <div class="pc-stats">${p.platform==='yt'?`<span><b>${compact(p.views||0)}</b> views</span>`:''}${p.likes!=null?`<span><b>${compact(p.likes)}</b> likes</span>`:`<span>likes hidden</span>`}<span><b>${compact(p.comments||0)}</b> comments</span></div>
     <p class="pc-date">${p.date?dlabel(toDate(p.date)):''}</p></div></a>
@@ -827,13 +885,13 @@ function closeTeleprompter(){if(!TP)return;const {el,tp}=TP;tp.run=false;clearIn
 const WEB=DATA.web||{};
 const WEB_ON=!!(WEB.daily&&WEB.daily.length);
 const PLAT={
-  ig:{name:'Instagram',short:'IG',color:'#D6358F',tab:'instagram'},
-  fb:{name:'Facebook',short:'FB',color:'#1668D9',tab:'facebook'},
-  ads:{name:'Meta Ads',short:'Ad',color:'#0F8A6A',tab:'ads'},
-  yt:{name:'YouTube',short:'YT',color:'#D92D20',tab:'youtube'},
-  web:{name:'Website',short:'W',color:'#6D28D9',tab:'website'}
+  ig:{name:'Instagram',short:'IG',color:'#C92A72',tab:'instagram'},
+  fb:{name:'Facebook',short:'FB',color:'#1565D8',tab:'facebook'},
+  ads:{name:'Meta Ads',short:'Ad',color:'#0B7F62',tab:'ads'},
+  yt:{name:'YouTube',short:'YT',color:'#C4221A',tab:'youtube'},
+  web:{name:'Website',short:'W',color:'#5B4BC4',tab:'website'}
 };
-const PEND=[['gbp','Google Business','G','#B45309','Waiting for Google approval','pend'],['pin','Pinterest','Pi','#BD081C','Approval pending','pend'],
+const PEND=[['gbp','Google Business','G','#1E7F3E','Waiting for Google approval','pend'],['pin','Pinterest','P','#C8102E','Trial access approved · connecting soon','pend'],
   ['li','LinkedIn','in','#0A66C2','Approval pending','pend'],['gads','Google Ads','GA','#475467','Not connected','off']];
 const pbadge=k=>`<span class="pbadge" style="background:${PLAT[k].color}">${PLAT[k].short}</span>`;
 function chg(c,p,invert){
@@ -848,20 +906,23 @@ function webDaysArr(){
 }
 function platData(k){
   const R=state.range,c=slice(R),p=slice(R,1),last14=days.slice(-14);
+  // bars follow the chosen range: one bar per day (7/30), one per week (90)
+  const pick=(arr,f)=>{const s=arr.slice(-R);if(R<=30) return {v:s.map(f),d:s.map(x=>x.d)};const o={v:[],d:[]};for(let i=0;i<s.length;i+=7){const ch=s.slice(i,i+7);o.v.push(ch.reduce((t,x)=>t+(f(x)||0),0));o.d.push(ch[0].d)}return o};
+  const per2=R>30?'week':'day';
   if(k==='ig'){
     if(!has(c,'ig_reach')&&!has(c,'ig_followers')) return null;
     const posts=(DATA.posts||[]).filter(x=>x.platform==='Instagram'&&x.date&&toDate(x.date)>=c[0].d).length;
     return {tile:{v:fmtOr(S(c,'ig_reach'),compact),l:'Reach · '+R+'d',d:chg(S(c,'ig_reach'),S(p,'ig_reach'))},
       row1:[['Reach',fmtOr(S(c,'ig_reach'),compact),chg(S(c,'ig_reach'),S(p,'ig_reach'))],['Followers',fmtOr(lastVal(c,'ig_followers'),num),chg(lastVal(c,'ig_followers'),lastVal(p,'ig_followers'))],['Posts',num(posts),'']],
       row2:[['Views',fmtOr(S(c,'ig_views'),compact)],['Interactions',fmtOr(S(c,'ig_interactions'),compact)],['Profile',fmtOr(S(c,'ig_profile_views'),compact)]],
-      chart:'Reach per day',bars:last14.map(d=>d.ig_reach),fmt:num};
+      chart:'Reach per '+per2,...(o=>({bars:o.v,bdates:o.d}))(pick(days,d=>d.ig_reach)),fmt:num};
   }
   if(k==='fb'){
     if(!has(c,'fb_reach')&&!has(c,'fb_followers')) return null;
     return {tile:{v:fmtOr(lastVal(c,'fb_followers'),compact),l:'Followers',d:chg(lastVal(c,'fb_followers'),lastVal(p,'fb_followers'))},
       row1:[['Reach',fmtOr(S(c,'fb_reach'),compact),chg(S(c,'fb_reach'),S(p,'fb_reach'))],['Followers',fmtOr(lastVal(c,'fb_followers'),num),chg(lastVal(c,'fb_followers'),lastVal(p,'fb_followers'))],['Engaged',fmtOr(S(c,'fb_engagements'),compact),chg(S(c,'fb_engagements'),S(p,'fb_engagements'))]],
       row2:[['Views',fmtOr(S(c,'fb_views'),compact)],['New follows',fmtOr(S(c,'fb_new_follows'),num)],['',' ']],
-      chart:'Reach per day',bars:last14.map(d=>d.fb_reach),fmt:num};
+      chart:'Reach per '+per2,...(o=>({bars:o.v,bdates:o.d}))(pick(days,d=>d.fb_reach)),fmt:num};
   }
   if(k==='ads'){
     if(!has(c,'ad_spend')&&!has(p,'ad_spend')) return null;
@@ -870,7 +931,7 @@ function platData(k){
     return {tile:{v:fmtOr(sp,inr),l:'Spend · '+R+'d',d:chg(sp,psp)},
       row1:[['Spend',fmtOr(sp,inr),chg(sp,psp)],['Leads',fmtOr(ld,num),chg(ld,pld)],['Per lead',fmtOr(cpl,inr),chg(cpl,pcpl,true)]],
       row2:[['Reach',fmtOr(S(c,'ad_reach'),compact)],['Clicks',fmtOr(S(c,'ad_clicks'),compact)],['Link clicks',fmtOr(S(c,'ad_link_clicks'),compact)]],
-      chart:'Spend per day',bars:last14.map(d=>d.ad_spend),fmt:inr};
+      chart:'Spend per '+per2,...(o=>({bars:o.v,bdates:o.d}))(pick(days,d=>d.ad_spend)),fmt:inr};
   }
   if(k==='yt'){
     if(!YCH.length) return null;
@@ -881,7 +942,7 @@ function platData(k){
     return {tile:{v:fmtOr(S(cc,'views'),compact),l:'Views · '+R+'d',d:chg(S(cc,'views'),S(pp,'views'))},
       row1:[['Subscribers',num(subs),net(cc)!=null?`<span class="up">+${num(net(cc))}</span>`:''],['Views',fmtOr(S(cc,'views'),compact),chg(S(cc,'views'),S(pp,'views'))],['Videos',num(vids),'']],
       row2:[['Watch hrs',fmtOr(S(cc,'minutes')!=null?S(cc,'minutes')/60:null,compact)],['Likes',fmtOr(S(cc,'likes'),num)],['Comments',fmtOr(S(cc,'comments'),num)]],
-      chart:'Views per day',bars:arr.slice(-14).map(d=>d.views),fmt:num};
+      chart:'Views per '+per2,...(o=>({bars:o.v,bdates:o.d}))(pick(arr,d=>d.views)),fmt:num};
   }
   if(k==='web'){
     if(!WEB_ON) return null;
@@ -889,7 +950,7 @@ function platData(k){
     return {tile:{v:fmtOr(S(cc,'users'),compact),l:'Visitors · '+R+'d',d:chg(S(cc,'users'),S(pp,'users'))},
       row1:[['Visitors',fmtOr(S(cc,'users'),compact),chg(S(cc,'users'),S(pp,'users'))],['Sessions',fmtOr(S(cc,'sessions'),compact),chg(S(cc,'sessions'),S(pp,'sessions'))],['Page views',fmtOr(S(cc,'views'),compact),chg(S(cc,'views'),S(pp,'views'))]],
       row2:[['Engaged',fmtOr(S(cc,'engaged'),compact)],['',' '],['',' ']],
-      chart:'Visitors per day',bars:a.slice(-14).map(d=>d.users),fmt:num};
+      chart:'Visitors per '+per2,...(o=>({bars:o.v,bdates:o.d}))(pick(a,d=>d.users)),fmt:num};
   }
   return null;
 }
@@ -910,57 +971,65 @@ function homeInsights(){
   return ins;
 }
 
-function heroCard(k,on){
+function heroCard(k){
   const cur=platData(k); if(!cur) return '';
-  const bars=cur.bars.map(v=>v==null?0:v),mx=Math.max(1,...bars),top=bars.indexOf(Math.max(...bars));
-  const avg=bars.length?bars.reduce((s,x)=>s+x,0)/bars.length:0;
-  return `<section class="hero dk" data-k="${k}">
-    <div class="h-top"><div class="h-sw"><b>${PLAT[k].name.toUpperCase()}</b>${on?on.map((x,i)=>`<button type="button" class="h-pk${x===k?' on':''}" data-slide="${i}" aria-label="${PLAT[x].name}">${pbadge(x)}<i></i></button>`).join(''):pbadge(k)}</div>
-      <span class="h-rg">${state.range} days</span></div>
+  const vals=cur.bars.map(v=>v==null?0:v), mx=Math.max(...vals), top=vals.indexOf(mx);
+  const sel=state.hsel!=null&&state.hsel<vals.length?state.hsel:vals.length-1;
+  const bd=cur.bdates, n=vals.length;
+  const items=vals.map((v,i)=>({v,on:i===sel,best:i===top,tip:cur.fmt(v),label:n<=7?WD[bd[i].getDay()]:((i%(n>20?5:3)===0||i===n-1)?String(bd[i].getDate()):''),aria:dlabel(bd[i])+': '+cur.fmt(v)}));
+  return `<section class="hero" data-k="${k}">
+    <div class="h-top"><div class="h-sw">${pbadge(k)}<b>${PLAT[k].name}</b></div><span class="h-rg">last ${state.range} days</span></div>
     <div class="h-row">${cur.row1.map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div><div class="h-d">${s[2]||'&nbsp;'}</div></div>`).join('')}</div>
     <div class="h-row">${cur.row2.filter(s=>s[0]).map(s=>`<div><div class="h-k">${s[0]}</div><div class="h-v">${s[1]}</div></div>`).join('')}</div>
-    <div class="h-ch"><span>${cur.chart.toUpperCase()}</span><span class="h-avg">14-day avg ${cur.fmt(avg)}</span></div>
-    <div class="h-bars">${bars.map((v,i)=>`<i style="height:${Math.max(4,Math.round(v/mx*96))}px" class="${i===top?'top':''}" title="${dlabel(days[DAYS-14+i].d)}: ${cur.fmt(v)}"></i>`).join('')}</div>
-    <div class="h-ax"><span>${dlabel(days[DAYS-14].d)}</span><span>${dlabel(days[DAYS-1].d)}</span></div>
-    ${on?`<button class="h-open" type="button" data-tab="${PLAT[k].tab}">Open ${PLAT[k].name} insights →</button>`:''}
+    <div class="h-ch"><span>${cur.chart} · last ${state.range} days</span><span>${state.range>30?'week of ':''}${dlabel(bd[sel])}</span></div>
+    <div class="bchart">${tapBars(items,{sm:true,label:cur.chart})}</div>
   </section>`;
 }
 function home(){
-  const on=ON(); if(!on.includes(state.hp)) state.hp=on[0]||'ig';
+  const on=ON();
   const hr=new Date().getHours(), greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const today=new Date(), dstr=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][today.getDay()]+', '+today.getDate()+' '+['January','February','March','April','May','June','July','August','September','October','November','December'][today.getMonth()];
   const todo=SC.filter(x=>x.status!=='Posted').slice(0,3);
   const vir=CP.filter(x=>x.ratio>=2&&x.date>=ymd(new Date(Date.now()-7*864e5))&&!(CR.find(c=>c.handle===x.handle)||{}).isMe).sort((a,b)=>b.ratio-a.ratio).slice(0,8);
   const ins=homeInsights();
+  // total organic reach (Instagram + Facebook)
+  const R=state.range, c=slice(R), p=slice(R,1), rows=R>30?groupWeeks(c):c;
+  const reach=a=>{const x=S(a,'ig_reach'),y=S(a,'fb_reach');return x==null&&y==null?null:(x||0)+(y||0)};
+  const tR=reach(c), pR=reach(p), ch=pctCh(tR,pR);
+  const fol=(lastVal(c,'ig_followers')||0)+(lastVal(c,'fb_followers')||0)+YCH.reduce((t,x)=>t+(Nn(x.subs)||0),0);
+  const eng=((S(c,'ig_interactions')||0)+(S(c,'fb_engagements')||0)), er=tR?eng/tR*100:null;
+  const spend=S(c,'ad_spend');
+  const bv=rows.map(r=>(r.ig_reach||0)+(r.fb_reach||0)), bmax=bv.indexOf(Math.max(...bv));
+  if(state.hsel2==null||state.hsel2>=bv.length) state.hsel2=bv.length-1;
+  const items=bv.map((v,i)=>({v,on:i===state.hsel2,best:i===bmax,tip:compact(v),label:(rows.length<=7?WD[rows[i].d.getDay()]:((i%5===0||i===rows.length-1)?String(rows[i].d.getDate()):'')),aria:dlabel(rows[i].d)+': '+num(v)}));
+  const tiles=on.map(k=>{const d=platData(k);return `<button class="tile" type="button" data-tab="${PLAT[k].tab}">
+    <span class="t-h">${pbadge(k)}${PLAT[k].name}</span><span class="t-v">${d.tile.v}</span><span class="t-l">${d.tile.l}</span>${spark(d.bars)}<span class="t-d">${d.tile.d||'&nbsp;'}</span></button>`}).join('');
+  const upnext=`<div><div class="cap row"><span>Scripts to shoot</span><button class="linkbtn" type="button" data-tab="scripts">See all</button></div>
+  ${todo.length?`<div class="list">${todo.map(x=>`<button class="li" type="button" data-tab="scripts"><span class="li-t"><b>${esc(x.title)}</b><span class="stype">${esc((STYPE[x.type]||{}).n||x.type)}</span></span>
+    <span class="li-s">${esc(x.id)} · post ${esc(sdate(x.post_on))} · ${esc(x.status)}</span></button>`).join('')}</div>`:`<div class="list"><div class="li">${empty('All scripts are posted. Ask for new ones.')}</div></div>`}</div>`;
+  const insH=`<div><div class="cap" id="homeIns">AI insights</div>
+  <section class="panel">${ins.length?`<ul class="insights">${ins.map(x=>`<li><span class="ic ${x[0]}">${x[0]==='g'?'↑':x[0]==='w'?'!':'✦'}</span><span>${x[1]}</span></li>`).join('')}</ul>`:empty('Not enough data yet.')}</section></div>`;
   return `
-  <div class="hhead"><div><h2 class="hello">${greet}, Poonam</h2><p class="sub" style="margin:2px 0 0">Everything at a glance · last ${state.range} days</p></div>
-    <button class="ai-link" data-go="#homeIns" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path></svg>AI Insights</button></div>
-  <div class="cap">Channels</div>
-  <div class="tiles">${on.map(k=>{const d=platData(k);return `<button class="tile" type="button" data-tab="${PLAT[k].tab}">
-    <span class="t-h">${pbadge(k)}${PLAT[k].name}</span><span class="t-v">${d.tile.v}</span><span class="t-l">${d.tile.l}</span><span class="t-d">${d.tile.d||'&nbsp;'}</span></button>`}).join('')}
-    <button class="tile add" type="button" data-tab="channels"><span class="t-h">+ More channels</span><span class="t-l">Website, Google Business, Pinterest, LinkedIn</span></button></div>
-  ${on.length?`<div class="hcar"><div class="htrack" id="htrack">${on.map(k=>heroCard(k,on)).join('')}</div>
-    <div class="hdots" role="tablist" aria-label="Channels">${on.map((k,i)=>`<button type="button" class="hdot${k===state.hp?' on':''}" data-slide="${i}" aria-label="${PLAT[k].name}"></button>`).join('')}</div></div>`:''}
-  <div class="cap row"><span>Scripts to shoot</span><button class="linkbtn" type="button" data-tab="scripts">See all</button></div>
-  ${todo.length?`<div class="list">${todo.map(x=>`<button class="li" type="button" data-tab="scripts"><span class="li-t"><b>${esc(x.title)}</b><span class="stype" style="--c:${(STYPE[x.type]||{}).c||'var(--accent)'}">${esc((STYPE[x.type]||{}).n||x.type)}</span></span>
-    <span class="li-s">${esc(x.id)} · post ${esc(sdate(x.post_on))} · ${esc(x.owner)} · ${esc(x.status)}</span></button>`).join('')}</div>`:`<div class="list"><div class="li">${empty('All scripts are posted. Ask for new ones.')}</div></div>`}
-  ${vir.length?`<div class="cap row"><span>Viral this week · competition</span><button class="linkbtn" type="button" data-tab="competition">See all</button></div>
-  <div class="vrow">${vir.map(p=>{const c=CR.find(c=>c.handle===p.handle)||{};return `<a class="vc" href="${esc(p.link)}" target="_blank" rel="noopener"><span class="vc-img">${thumb({thumb:p.thumb,format:p.kind})}<span class="vc-b">${p.ratio}× usual</span></span>
-    <span class="vc-t"><b>@${esc(p.handle)}</b><span>${esc(p.kind)} · ${p.date?dlabel(toDate(p.date)):''}</span></span></a>`}).join('')}</div>`:''}
-  <div class="cap" id="homeIns">AI insights</div>
-  <section class="panel">${ins.length?`<ul class="insights">${ins.map(x=>`<li><span class="ic ${x[0]}">${x[0]==='g'?'↑':x[0]==='w'?'!':'i'}</span><span>${x[1]}</span></li>`).join('')}</ul>`:empty('Not enough data yet.')}</section>`;
+  <div class="hhead"><div><p class="hdate">${dstr}</p><h2 class="hello">${greet}, ${esc(String(ME.role==='owner'&&/Owner/.test(ME.name)?'Poonam':ME.name).split(' ')[0])}</h2></div>${CAN('team')?`<button class="linkbtn" type="button" data-tab="team">Team · ${(DATA.team||[]).filter(u=>u.active).length}</button>`:''}</div>
+  ${pubBanner()}
+  ${tR!=null?`<section class="hsum">
+    <div class="hs-top"><span>Total reach · IG + FB</span><span class="hs-live">${R} days</span></div>
+    <div class="hs-main"><span class="hs-big">${compact(tR)}</span><span class="hs-d">${ch==null?'':`<span class="${Math.abs(ch)<0.5?'flat':ch>0?'up':'down'}">${ch>0?'▲':'▼'} ${Math.abs(ch).toFixed(Math.abs(ch)<10?1:0)}%</span>vs previous ${R} days`}</span></div>
+    <div class="bchart">${tapBars(items,{label:'Reach per '+per(),grow:state._grow})}</div>
+    <div class="hs-stats"><div><span>Followers</span><b>${compact(fol)}</b></div><div><span>Engagement</span><b>${er!=null?pct(er,1):'—'}</b></div>${CAN('ads')?`<div><span>Ad spend</span><b>${spend!=null?inr(spend):'—'}</b></div>`:`<div><span>Posts</span><b>${num((DATA.posts||[]).filter(x=>x.date&&String(x.date).slice(0,10)>=ymd(c[0].d)).length)}</b></div>`}</div>
+  </section>`:''}
+  ${on.length?`<div class="cap row"><span>Channels</span><button class="linkbtn" type="button" data-tab="channels">See all</button></div>
+  <div class="tiles">${tiles}</div>`:''}
+  <div class="hgrid2">${upnext}${insH}</div>
+  ${vir.length?`<div class="cap row"><span>Viral this week</span><button class="linkbtn" type="button" data-tab="competition">All ideas</button></div>
+  <div class="vrow">${vir.map(p=>`<a class="vc" href="${esc(p.link)}" target="_blank" rel="noopener"><span class="vc-img">${thumb({thumb:p.thumb,format:p.kind})}<span class="vc-b">${p.ratio}× usual</span></span>
+    <span class="vc-t"><b>@${esc(p.handle)}</b><span>${esc(p.kind)} · ${p.date?dlabel(toDate(p.date)):''}</span></span></a>`).join('')}</div>`:''}`;
 }
 function afterHome(){
-  const tr=$('#htrack');
-  if(tr){
-    const on=ON(), cards=[...tr.children], dots=[...document.querySelectorAll('.hdot')];
-    const go=(i,smooth)=>{const c=cards[i];if(c)tr.scrollTo({left:c.offsetLeft-tr.offsetLeft,behavior:smooth?'smooth':'auto'})};
-    const mark=i=>{dots.forEach((d,j)=>d.classList.toggle('on',j===i));if(on[i]&&state.hp!==on[i]){state.hp=on[i];save()}};
-    go(Math.max(0,on.indexOf(state.hp)),false);
-    let t;tr.addEventListener('scroll',()=>{clearTimeout(t);t=setTimeout(()=>{const x=tr.scrollLeft;let best=0,bd=1e9;cards.forEach((c,i)=>{const d=Math.abs(c.offsetLeft-tr.offsetLeft-x);if(d<bd){bd=d;best=i}});mark(best)},80)},{passive:true});
-    document.querySelectorAll('[data-slide]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const i=+b.dataset.slide;go(i,true);mark(i)}));
-  }
-  document.querySelectorAll('#view [data-tab]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();goTab(b.dataset.tab)}));
-  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const t=$(b.dataset.go);if(t)t.scrollIntoView({behavior:'smooth'})}));
+  const v=$('#view');
+  v.querySelectorAll('.hsum .bc-b').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();state.hsel2=+b.dataset.i;render()}));
+  growBars(v);
+  v.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();goTab(b.dataset.tab)}));
 }
 function channelsView(){
   const on=ON(), total=on.length+PEND.length+(WEB_ON?0:1);
@@ -975,10 +1044,318 @@ function channelsView(){
   <div class="cap">More</div>
   <div class="list">
     <button class="li" type="button" data-tab="posts"><span class="li-t"><b>All posts</b></span><span class="li-s">Every Instagram and Facebook post, sortable</span></button>
+    ${CAN('team')?`<button class="li" type="button" data-tab="team"><span class="li-t"><b>Team</b><span class="stype">${(DATA.team||[]).filter(u=>u.active).length} people</span></span><span class="li-s">Add people, roles and PINs · activity log</span></button>`:''}
     <button class="li" type="button" data-tab="audience"><span class="li-t"><b>Audience</b></span><span class="li-s">Who follows you and when they are online</span></button>
   </div>`;
 }
 
+/* ---------- Team (Owners only) ---------- */
+const ROLE_ORDER=['owner','smm','editor','ads','writer','viewer'];
+const ROLE_INFO={owner:['Owner','Everything. Approves every post. Manages the team.'],smm:['Social Media Manager','Makes drafts and captions, schedules. Posts only after an Owner approves.'],
+  editor:['Video Editor','Organic analytics, scripts, uploads finished videos. No ads.'],ads:['Ads Manager','Meta Ads: pause, budget, boost (with Action PIN).'],
+  writer:['Script Writer','Adds and edits scripts, uses Ideas. No analytics.'],viewer:['Viewer','Read-only analytics.']};
+const APP_URL='https:'+'/'+'/flapoox.github.io/dp-insights-app/';
+const initials=n=>String(n||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';
+const ago=iso=>{if(!iso)return '';const d=(Date.now()-new Date(iso).getTime())/864e5;return d<1?'today':d<2?'yesterday':Math.floor(d)+' days ago'};
+function sendTeam(op){
+  if(window.DP_ACTION) return window.DP_ACTION({team:op});
+  return new Promise(res=>{try{google.script.run.withSuccessHandler(res).withFailureHandler(e=>res({error:'net',message:String(e&&e.message||e)})).teamOp(op)}catch(e){res({error:'net',message:'Not available here.'})}});
+}
+function teamView(){
+  const T=DATA.team||[];
+  const row=u=>`<button type="button" class="tm-row${u.active?'':' off'}" data-uid="${esc(u.id)}"><span class="tm-av r-${esc(u.role)}">${esc(initials(u.name))}</span>
+    <span class="tm-t"><b>${esc(u.name)}</b><span>${u.active?(u.last?'Last active '+ago(u.last):'Not opened the app yet'):'Switched off'}</span></span><span class="tm-role r-${esc(u.role)}">${esc(u.roleName)}</span></button>`;
+  const groups=ROLE_ORDER.map(r=>{const us=T.filter(u=>u.role===r);if(!us.length)return '';return `<div class="tm-cap">${esc(ROLE_INFO[r][0]).toUpperCase()}S · ${us.length}</div><div class="list">${us.map(row).join('')}</div>`}).join('');
+  const act=(DATA.activity||[]).slice(0,40);
+  return `<div class="hhead"><div><p class="sub" style="margin:0">${T.filter(u=>u.active).length} active · only Owners see this</p></div><button type="button" class="abtn a-good" id="tmAdd">＋ Add person</button></div>
+  <div class="note" style="margin-top:12px">Everyone has their <b>own PIN</b>. Nothing is posted until an <b>Owner approves</b>. Any number of people can share a role.${DATA.me&&DATA.me.id==='main'?' You are signed in with the main PIN; add yourself and Poonam as Owners to get personal PINs.':''}</div>
+  ${groups||`<section class="panel" style="margin-top:14px">${empty('No team members yet. Tap “Add person” to add the first one.')}</section>`}
+  <div class="tm-cap">ACTIVITY · WHO DID WHAT</div>
+  <section class="panel">${act.length?`<ul class="alog">${act.map(x=>`<li><span class="sub">${esc(new Date(x.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}))}</span> · <b>${esc(x.who)}</b>${x.role?` <span class="sub">(${esc(x.role)})</span>`:''}<br>${esc(x.what)}${x.detail?` · <span class="sub">${esc(x.detail)}</span>`:''}</li>`).join('')}</ul>`:empty('Nothing yet. Changes by team members appear here.')}</section>`;
+}
+function pinScreen(u,pin){
+  const msg=`Hi ${u.name}, you are added to DP Insights as ${u.roleName}.\nOpen: ${APP_URL}\nYour PIN: ${pin}\nPlease keep it private.`;
+  const wa='https:'+'/'+'/wa.me/'+(String(u.phone||'').replace(/\D/g,'')||'')+'?text='+encodeURIComponent(msg);
+  return `<p><b>${esc(u.name)}</b> · ${esc(u.roleName)}</p><p class="sub">Their PIN (shown only now):</p>
+    <div class="pinbig" aria-label="PIN">${esc(pin)}</div>
+    <div class="dlg-acts" style="justify-content:stretch"><button type="button" class="abtn a-ghost" id="pinCopy" style="flex:1">Copy message</button><a class="abtn a-good" style="flex:1" href="${esc(wa)}" target="_blank" rel="noopener">Share on WhatsApp</a></div>`;
+}
+function openTeamDlg(mode,u){
+  const dlg=$('#actDlg'), R=DATA.roles||ROLE_ORDER.map(k=>({key:k,name:ROLE_INFO[k][0]}));
+  const roleOpts=sel=>`<div class="tm-roles" role="radiogroup" aria-label="Role">${ROLE_ORDER.map(k=>`<label class="tm-ro"><input type="radio" name="tmRole" value="${k}" ${k===sel?'checked':''}><span><b>${ROLE_INFO[k][0]}</b><span>${ROLE_INFO[k][1]}</span></span></label>`).join('')}</div>`;
+  let body='';
+  if(mode==='add') body=`<h2>Add person</h2>
+    <label class="fld">Name<input id="tmName" autocomplete="off" required maxlength="80"></label>
+    <label class="fld">Email (optional, for notifications)<input id="tmEmail" type="email" autocomplete="off"></label>
+    <label class="fld">WhatsApp number (optional)<input id="tmPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="+91"></label>
+    <p class="sub" style="margin-top:6px">Role</p>${roleOpts('editor')}
+    <p class="err" id="tmErr" role="alert"></p>
+    <div class="dlg-acts"><button type="button" class="abtn a-ghost" id="tmCancel">Cancel</button><button type="submit" class="abtn a-good" id="tmGo">Add &amp; create PIN</button></div>`;
+  else body=`<h2>${esc(u.name)}</h2><p class="sub">${u.active?(u.last?'Last active '+ago(u.last):'Has not opened the app yet'):'Switched off'}${u.email?' · '+esc(u.email):''}${u.phone?' · '+esc(u.phone):''}</p>
+    <p class="sub" style="margin-top:6px">Role</p>${roleOpts(u.role)}
+    <p class="err" id="tmErr" role="alert"></p>
+    <div class="tm-acts"><button type="button" class="abtn a-ghost" id="tmPin">New PIN</button><button type="button" class="abtn a-ghost" id="tmOnOff">${u.active?'Switch off':'Switch on'}</button><button type="button" class="abtn a-ghost" id="tmDel" style="color:var(--bad)">Remove</button></div>
+    <div class="dlg-acts"><button type="button" class="abtn a-ghost" id="tmCancel">Close</button><button type="submit" class="abtn a-good" id="tmGo">Save role</button></div>`;
+  dlg.innerHTML=`<form method="dialog" class="dlg" id="tmForm">${body}</form>`;
+  const err=t=>{$('#tmErr').textContent=t||''};
+  const done=r=>{if(r&&r.team){DATA.team=r.team}};
+  const showPin=(r)=>{dlg.innerHTML=`<div class="dlg">${pinScreen(r.user,r.pin)}<div class="dlg-acts"><button type="button" class="abtn a-ghost" id="tmCancel">Done</button></div></div>`;
+    const msg=`Hi ${r.user.name}, you are added to DP Insights as ${r.user.roleName}.\nOpen: ${APP_URL}\nYour PIN: ${r.pin}\nPlease keep it private.`;
+    $('#pinCopy').onclick=()=>copyText(msg).then(ok=>{$('#pinCopy').textContent=ok?'✓ Copied':'Copy failed'});
+    $('#tmCancel').onclick=()=>dlg.close();};
+  const call=(op,btnEl,after)=>{err('');if(btnEl){btnEl.disabled=true}sendTeam(op).then(r=>{if(btnEl)btnEl.disabled=false;if(!r||!r.ok){err((r&&r.message)||'Something went wrong.');return}done(r);after(r)})};
+  $('#tmCancel').onclick=()=>dlg.close();
+  dlg.addEventListener('close',()=>render(),{once:true});
+  const role=()=>{const x=dlg.querySelector('input[name="tmRole"]:checked');return x?x.value:null};
+  $('#tmForm').onsubmit=e=>{e.preventDefault();
+    if(mode==='add'){const name=$('#tmName').value.trim();if(!name)return err('Please enter a name.');
+      call({op:'add',name,email:$('#tmEmail').value,phone:$('#tmPhone').value,role:role()},$('#tmGo'),showPin);}
+    else call({op:'update',id:u.id,role:role()},$('#tmGo'),()=>dlg.close());};
+  if(mode!=='add'){
+    $('#tmPin').onclick=()=>{if(!confirmInline($('#tmPin'),'Old PIN stops working. Tap again'))return;call({op:'pin',id:u.id},$('#tmPin'),showPin)};
+    $('#tmOnOff').onclick=()=>call({op:'update',id:u.id,active:!u.active},$('#tmOnOff'),()=>dlg.close());
+    $('#tmDel').onclick=()=>{if(!confirmInline($('#tmDel'),'Tap again to remove'))return;call({op:'remove',id:u.id},$('#tmDel'),()=>dlg.close())};
+  }
+  dlg.showModal();
+}
+function confirmInline(b,txt){if(b.dataset.armed)return true;b.dataset.armed='1';b.dataset.orig=b.textContent;b.textContent=txt;setTimeout(()=>{if(b.isConnected){b.textContent=b.dataset.orig;delete b.dataset.armed}},4000);return false}
+function afterTeam(){
+  const v=$('#view');
+  const add=$('#tmAdd'); if(add) add.addEventListener('click',()=>openTeamDlg('add'));
+  v.querySelectorAll('[data-uid]').forEach(b=>b.addEventListener('click',()=>{const u=(DATA.team||[]).find(x=>x.id===b.dataset.uid);if(u)openTeamDlg('edit',u)}));
+}
+
+/* ---------- Publish: one video → every platform, after an Owner's OK ---------- */
+const PB={ig:['IG','var(--ig)','Instagram'],fb:['FB','var(--fb)','Facebook'],yt:['YT','var(--yt)','YouTube'],li:['in','#0A66C2','LinkedIn']};
+const PKEYS=['ig','fb','yt','li'];
+const PST={draft:['Draft',''],sentback:['Sent back','warn'],pending:['Waiting for approval','acc'],approved:['Approved','good'],scheduled:['Scheduled','good'],
+  posting:['Posting…','acc'],posted:['Posted','good'],manual:['Post by hand','warn'],partly:['Partly posted','bad'],failed:['Failed','bad']};
+let PV={mode:'list'};
+const PUB=()=>DATA.pub||{posts:[],ready:[],conn:{}};
+const pbx=k=>`<span class="pbadge" style="background:${PB[k][1]}" aria-hidden="true">${PB[k][0]}</span>`;
+const mb=n=>n>=1048576?(n/1048576).toFixed(n>=1e8?0:1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+const when=iso=>iso?new Date(iso).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'';
+const pstPill=s=>{const x=PST[s]||[s,''];return `<span class="pill ${x[1]}">${esc(x[0])}</span>`};
+const PLAY='<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>';
+function sendPub(op){
+  if(window.DP_ACTION) return window.DP_ACTION({publish:op});
+  return new Promise(res=>{try{google.script.run.withSuccessHandler(res).withFailureHandler(e=>res({error:'net',message:String(e&&e.message||e)})).publishOp(op)}catch(e){res({error:'net',message:'Not available here.'})}});
+}
+function pubLine(p){
+  const r=p.res||{},on=PKEYS.filter(k=>p.plats&&p.plats[k]&&p.plats[k].mode!=='off');
+  if(p.status==='sentback') return 'Sent back'+(p.note?': '+p.note:'');
+  if(p.status==='pending') return 'By '+p.by+' · '+when(p.updated||p.created);
+  if(p.status==='scheduled') return 'Goes live '+when(p.when);
+  if(p.status==='posting'||p.status==='approved'){const w=on.map(k=>r[k]&&r[k].msg).filter(Boolean)[0];return w||'Starts within 5 minutes'}
+  if(p.status==='posted'||p.status==='partly'||p.status==='manual'||p.status==='failed'){const ok=on.filter(k=>r[k]&&r[k].st==='ok').length;return 'Live on '+ok+' of '+on.length+(p.status==='manual'?' · post the rest by hand':'')}
+  return 'Draft by '+p.by+' · '+when(p.updated||p.created);
+}
+function pubRowHtml(p){
+  const on=PKEYS.filter(k=>p.plats&&p.plats[k]&&p.plats[k].mode!=='off');
+  return `<button type="button" class="pq" data-pid="${esc(p.id)}"><span class="pq-v">${PLAY}</span>
+    <span class="pq-t"><b>${esc(p.title)}</b><span>${esc(pubLine(p))}</span><span class="pq-b">${on.map(pbx).join('')}</span></span>${pstPill(p.status)}</button>`;
+}
+function publishView(){
+  if(PV.mode==='edit') return pubEditView();
+  if(PV.mode==='view') return pubDetailView();
+  const P=PUB(),posts=P.posts||[],own=CAN('approve');
+  const waiting=posts.filter(p=>p.status==='pending');
+  const active=posts.filter(p=>['draft','sentback','approved','scheduled','posting','failed','partly','manual'].includes(p.status)&&(own||p.status!=='draft'||p.byId===P.me));
+  const done=posts.filter(p=>p.status==='posted').slice(0,10);
+  const appr=p=>{const on=PKEYS.filter(k=>p.plats[k]&&p.plats[k].mode!=='off');return `<article class="apr">
+    <div class="apr-h"><span class="pq-v lg">${PLAY}</span><div class="apr-t"><b>${esc(p.title)}</b><span>By ${esc(p.by)} · ${esc(when(p.updated||p.created))}</span><span class="pq-b">${on.map(pbx).join('')}</span></div></div>
+    <div class="apr-n">${p.when?'Goes live '+esc(when(p.when))+' after approval':'Goes live as soon as you approve'} · ${on.map(k=>PB[k][2]+(p.plats[k].mode==='manual'?' (by hand)':'')).join(', ')}</div>
+    <div class="apr-a"><button type="button" class="abtn a-ghost" data-pback="${esc(p.id)}">Send back</button><button type="button" class="abtn a-ghost" data-pid="${esc(p.id)}">Open</button><button type="button" class="abtn a-good" data-pok="${esc(p.id)}">Approve</button></div>
+    <p class="err" data-perr="${esc(p.id)}" role="alert"></p></article>`};
+  const ready=(P.ready||[]);
+  return `<div class="hhead"><div><h2 class="hello">Publish</h2><p class="sub" style="margin:4px 0 0">One video → every platform, after an Owner's OK</p></div></div>
+  ${P.error?`<div class="note">Could not load Publish: ${esc(P.error)}</div>`:''}
+  ${own&&waiting.length?`<div class="cap">Waiting for you · ${waiting.length}</div><div class="aprs">${waiting.map(appr).join('')}</div>`:''}
+  <div class="cap row"><span>New in "Ready to post"</span>${P.folderUrl?`<a class="linkbtn" href="${esc(P.folderUrl)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
+  ${ready.length?`<div class="list">${ready.map(f=>`<div class="prow"><span class="pq-v">${PLAY}</span><span class="t"><b>${esc(f.name)}</b><span>${mb(f.size)} · added ${esc(ago(f.created))}</span></span><button type="button" class="abtn a-good sm" data-pnew="${esc(f.id)}">Make post</button></div>`).join('')}</div>`
+    :`<section class="panel">${empty('No new videos. Editors put finished videos (MP4, 9:16) in the Google Drive folder “Ready to post”.'+(P.folderErr?' ('+esc(P.folderErr)+')':''))}</section>`}
+  ${!own&&waiting.length?`<div class="cap">Waiting for an Owner · ${waiting.length}</div><div class="list">${waiting.map(pubRowHtml).join('')}</div>`:''}
+  <div class="cap">In progress</div>
+  ${active.length?`<div class="list">${active.map(pubRowHtml).join('')}</div>`:`<section class="panel">${empty('Nothing in progress.')}</section>`}
+  ${done.length?`<div class="cap">Posted</div><div class="list">${done.map(pubRowHtml).join('')}</div>`:''}
+  ${pubConnHtml()}`;
+}
+function pubBanner(){
+  if(!DATA.pub||!CAN('publish'))return '';const ps=DATA.pub.posts||[];
+  const w=CAN('approve')?ps.filter(p=>p.status==='pending').length:0,sb=ps.filter(p=>p.status==='sentback'&&p.byId===DATA.pub.me).length,rd=(DATA.pub.ready||[]).length,fl=CAN('approve')?ps.filter(p=>p.status==='failed'||p.status==='partly').length:0;
+  if(w) return `<button type="button" class="pbanner" data-tab="publish"><span><b>${w}</b> post${w>1?'s':''} waiting for your approval</span><span aria-hidden="true">→</span></button>`;
+  if(sb) return `<button type="button" class="pbanner soft" data-tab="publish"><span><b>${sb}</b> post${sb>1?'s were':' was'} sent back to you</span><span aria-hidden="true">→</span></button>`;
+  if(fl) return `<button type="button" class="pbanner soft" data-tab="publish"><span><b>${fl}</b> post${fl>1?'s':''} need${fl>1?'':'s'} a fix</span><span aria-hidden="true">→</span></button>`;
+  if(rd) return `<button type="button" class="pbanner soft" data-tab="publish"><span><b>${rd}</b> new video${rd>1?'s':''} ready to post</span><span aria-hidden="true">→</span></button>`;
+  return '';
+}
+function pubConnHtml(){
+  const c=PUB().conn||{},own=CAN('approve');
+  const row=(b,name,ok,txt,fix)=>`<div class="prow">${b}<span class="t"><b>${name}</b><span class="${ok?'':'w'}">${esc(txt)}</span>${!ok&&own&&fix?`<span class="fix">${esc(fix)}</span>`:''}</span><span class="st ${ok?'on':'pend'}" aria-label="${ok?'ready':'needs setup'}"></span></div>`;
+  const meta=c.meta&&c.metaMissing&&!c.metaMissing.length;
+  const icon=t=>`<span class="pbadge" style="background:#141414;color:#F8A01B">${t}</span>`;
+  return `<div class="cap">Connections</div><div class="list">
+    ${row(pbx('fb')+pbx('ig'),'Facebook + Instagram',meta,!c.meta?'Meta token not saved':c.metaMissing==null?'Could not check permissions':c.metaMissing.length?'Needs: '+c.metaMissing.join(', '):'Ready to post','Sheet → Digital Poonam → Publish → Check Meta posting permissions')}
+    ${row(icon('☁'),'Video link (Cloudinary)',!!c.cld,c.cld?'Ready':'Not set up · needed for Facebook + Instagram','Sheet → Publish → 2. Save Cloudinary key')}
+    ${row(pbx('yt'),'YouTube',!!c.yt,c.yt?c.yt.title+(c.yt.public?' · public uploads':' · uploads stay Private until Google’s audit'):'Not connected','Sheet → Publish → 4. Connect YouTube for posting')}
+    ${row(pbx('li'),'LinkedIn',!!(c.li&&c.li.days>3),c.li?(c.li.days>0?c.li.name+' · sign-in valid '+c.li.days+' more days':'Sign-in expired'):'Not connected','Sheet → Publish → 3. Connect LinkedIn')}
+    ${row(icon('✦'),'Auto-write captions',!!c.ai,c.ai?'Claude · ₹'+(c.aiMonth||0)+' used this month':'Off · write captions yourself','Sheet → Publish → 5. Save Claude key')}
+  </div>`;
+}
+function pubNew(fileId){
+  const f=(PUB().ready||[]).find(x=>x.id===fileId);if(!f)return;
+  const c=PUB().conn||{};
+  PV={mode:'edit',d:{fileId,file:f,title:f.name.replace(/\.[^.]+$/,''),scriptId:'',ai:false,when:'',plats:{ig:{mode:'auto',cap:''},fb:{mode:'auto',cap:''},yt:{mode:c.yt&&c.yt.public?'auto':'manual',title:'',cap:''},li:{mode:c.li?'auto':'off',cap:''}}}};
+}
+function pubOpen(id){
+  const p=(PUB().posts||[]).find(x=>x.id===id);if(!p)return;
+  const own=CAN('approve'),mine=own||p.byId===PUB().me;
+  const editable=(['draft','sentback','pending'].includes(p.status)&&mine)||(own&&['approved','scheduled'].includes(p.status)&&!(p.res&&Object.values(p.res).some(r=>r&&(r.st==='ok'||r.st==='working'))));
+  PV=editable?{mode:'edit',id,d:JSON.parse(JSON.stringify({fileId:p.file.id,file:p.file,title:p.title,scriptId:p.scriptId,ai:p.ai,when:p.when,plats:p.plats})),p}:{mode:'view',id};
+}
+const PSUB={ig:'Reel · choose “By hand” for trending audio',fb:'Reel on your Page',yt:'Short',li:'Your profile · English'};
+function pubEditView(){
+  const d=PV.d,p=PV.p,c=PUB().conn||{},own=CAN('approve'),scr=(DATA.scripts||[]);
+  const conn={ig:c.meta&&c.cld,fb:c.meta&&c.cld,yt:!!c.yt,li:!!(c.li&&c.li.days>0)};
+  const seg=k=>`<div class="seg" role="group" aria-label="${PB[k][2]}">${[['auto','Auto'],['manual','By hand'],['off','Off']].map(m=>`<button type="button" data-seg="${k}" data-m="${m[0]}" aria-pressed="${d.plats[k].mode===m[0]}">${m[1]}</button>`).join('')}</div>`;
+  const prow=k=>`<div class="prow pp">${pbx(k)}<span class="t"><b>${PB[k][2]}</b><span>${k==='yt'&&!(c.yt&&c.yt.public)&&d.plats.yt.mode==='auto'?'Short · uploads Private until Google’s audit':PSUB[k]}</span>${d.plats[k].mode==='auto'&&!conn[k]?`<span class="w">Not connected yet${own?'':' · ask an Owner'}</span>`:''}</span>${seg(k)}</div>`;
+  const on=PKEYS.filter(k=>d.plats[k].mode!=='off');
+  const ta=(k,lab,max,field='cap',rows=5)=>`<label class="fld">${lab}<textarea data-cap="${k}" data-f="${field}" maxlength="${max}" rows="${rows}">${esc(d.plats[k][field]||'')}</textarea><span class="cnt" data-cnt="${k}${field}">${(d.plats[k][field]||'').length} / ${max}</span></label>`;
+  const now=new Date(),t730=new Date();t730.setHours(19,30,0,0);if(t730<now)t730.setDate(t730.getDate()+1);
+  const isPick=d.when&&Math.abs(new Date(d.when)-t730)>60000;
+  const local=iso=>{const x=new Date(iso);x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,16)};
+  const isOwnerFlow=own;
+  const firstBtn=isOwnerFlow?(d.when&&new Date(d.when)>now?'Approve & schedule':'Approve & post now'):'Send for approval';
+  return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button>${p?pstPill(p.status):''}</div>
+  <section class="pubhero"><div class="ph-top"><span>${p?'EDIT POST':'NEW POST'}</span><span>Google Drive</span></div>
+    <div class="ph-v"><span class="pq-v xl">${PLAY}</span><div class="ph-t"><b>${esc(d.file.name)}</b><span>${mb(d.file.size||0)}${d.file.url?` · <a href="${esc(d.file.url)}" target="_blank" rel="noopener">Open video</a>`:''}</span></div></div></section>
+  ${p&&p.status==='sentback'?`<div class="note warnb"><b>Sent back${p.history&&p.history.length?' by '+esc((p.history.slice().reverse().find(h=>/^Sent back/.test(h.what))||{}).who||''):''}:</b> ${esc(p.note||'Please make changes.')}</div>`:''}
+  <div class="pform">
+  <label class="fld">Title (for you and YouTube)<input id="pTitle" maxlength="140" value="${esc(d.title)}"></label>
+  <label class="fld">Which script is this? (optional, fills captions for free)<select id="pScript"><option value="">— None —</option>${scr.map(x=>`<option value="${esc(x.id)}" ${x.id===d.scriptId?'selected':''}>${esc(x.id+' · '+x.title)}</option>`).join('')}</select></label>
+  <label class="chk"><input type="checkbox" id="pAi" ${d.ai?'checked':''}><span><b>Made with AI</b> (AI clone, AI voice or animation). Adds the AI label where needed.</span></label>
+  </div>
+  <div class="cap">Post to</div>
+  <div class="list">${PKEYS.map(prow).join('')}</div>
+  <p class="sub" style="margin:8px 4px 0"><b>By hand</b> = DP Insights does not post it. After approval you get the caption and video to post yourself, e.g. for trending audio on Instagram.</p>
+  ${on.length?`<div class="cap">Captions</div>
+  <section class="panel aiw"><div class="aiw-h"><span class="aiw-i" aria-hidden="true">✦</span><div><b>Auto-write captions</b><span>Hinglish for Instagram + Facebook, English for LinkedIn, title + description for YouTube.</span></div></div>
+    ${c.ai?`<div class="aiw-c"><span>Uses Claude credit</span><b>≈ ₹0.50 per click</b></div><div class="aiw-a"><button type="button" class="abtn a-good" id="pAiGo">✦ Auto-write all</button>${d.scriptId?`<button type="button" class="abtn a-ghost" id="pUseScript">Use script caption (free)</button>`:''}</div>`
+      :`<p class="sub" style="margin:0">Not switched on${own?' (Sheet → Digital Poonam → Publish → 5. Save Claude key)':''}. Write captions below${d.scriptId?' or use the script caption':''}.</p>${d.scriptId?`<div class="aiw-a"><button type="button" class="abtn a-ghost" id="pUseScript">Use script caption (free)</button></div>`:''}`}
+    <p class="ok" id="pAiMsg" role="status"></p></section>
+  <div class="caps">
+    ${d.plats.ig.mode!=='off'?`<div class="capb">${pbx('ig')}${ta('ig','Instagram caption',2200)}</div>`:''}
+    ${d.plats.fb.mode!=='off'?`<div class="capb">${pbx('fb')}<div class="capw">${ta('fb','Facebook caption',5000)}${d.plats.ig.mode!=='off'?`<button type="button" class="linkbtn sm" data-same="fb">Same as Instagram</button>`:''}</div></div>`:''}
+    ${d.plats.yt.mode!=='off'?`<div class="capb">${pbx('yt')}<div class="capw"><label class="fld">YouTube title<input data-cap="yt" data-f="title" maxlength="100" value="${esc(d.plats.yt.title||'')}"><span class="cnt" data-cnt="yttitle">${(d.plats.yt.title||'').length} / 100</span></label>${ta('yt','YouTube description',5000,'cap',4)}</div></div>`:''}
+    ${d.plats.li.mode!=='off'?`<div class="capb">${pbx('li')}${ta('li','LinkedIn post (English)',3000)}</div>`:''}
+  </div>`:''}
+  <div class="cap">When</div>
+  <div class="whens" role="radiogroup" aria-label="When to post">
+    <button type="button" class="whn" data-when="now" aria-pressed="${!d.when}"><span>Right away</span><b>After approval</b></button>
+    <button type="button" class="whn" data-when="${esc(t730.toISOString())}" aria-pressed="${!!d.when&&!isPick}"><span>Best time</span><b>${t730.getDate()===now.getDate()?'Today':'Tomorrow'} 7:30 pm</b></button>
+    <label class="whn ${isPick?'on':''}"><span>Pick date &amp; time</span><input type="datetime-local" id="pWhen" value="${isPick?local(d.when):''}" min="${local(now.toISOString())}"></label>
+  </div>
+  <p class="err" id="pErr" role="alert"></p>
+  <div class="pacts">
+    <button type="button" class="abtn a-good big" id="pGo">${firstBtn}</button>
+    <button type="button" class="abtn a-ghost big" id="pSave">Save draft</button>
+    ${p&&own&&['pending','approved','scheduled'].includes(p.status)&&p.byId!==PUB().me?`<button type="button" class="abtn a-ghost big" id="pSendBack">Send back with a note</button>`:''}
+    ${p?`<button type="button" class="abtn a-ghost big danger" id="pDel">Remove post</button>`:''}
+  </div>
+  <p class="sub" style="text-align:center;margin-top:10px">${own?'You are an Owner: your OK is the approval.':'Nothing is posted until an Owner approves.'}</p>`;
+}
+function pubDetailView(){
+  const p=(PUB().posts||[]).find(x=>x.id===PV.id);
+  if(!p) return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button></div><section class="panel">${empty('This post is gone. It may have been removed.')}</section>`;
+  const own=CAN('approve'),on=PKEYS.filter(k=>p.plats[k]&&p.plats[k].mode!=='off'),r=p.res||{};
+  const ok=on.filter(k=>r[k]&&r[k].st==='ok').length;
+  const big={posted:'Live on '+ok+' of '+on.length,manual:'Live on '+ok+' of '+on.length,partly:'Live on '+ok+' of '+on.length,failed:'Not posted',posting:'Posting now',approved:'Starting soon',scheduled:'Scheduled',pending:'Waiting for approval',draft:'Draft',sentback:'Sent back'}[p.status]||p.status;
+  const sub={posted:'Everything is live',manual:'Post the rest by hand below',partly:'Some platforms need a fix',failed:'See what went wrong below',posting:'Big videos take a few minutes. Tap Refresh status.',approved:'Starts within 5 minutes',scheduled:when(p.when),pending:'An Owner needs to approve it'}[p.status]||'';
+  const ic=['posted'].includes(p.status)?'<span class="dn-i good">✓</span>':['failed','partly'].includes(p.status)?'<span class="dn-i bad">!</span>':'<span class="dn-i">⏱</span>';
+  const line=k=>{const x=r[k]||{},m=p.plats[k].mode;
+    let s='',cls='',act='';
+    if(x.st==='ok'){s=(x.note||'Live')+(x.at?' · '+when(x.at):'');cls=x.note&&/Private/.test(x.note)?'w':'g';act=x.url?`<a class="linkbtn" href="${esc(x.url)}" target="_blank" rel="noopener">Open</a>`:''}
+    else if(x.st==='err'){s=x.msg||'Failed';cls='b'}
+    else if(x.st==='manual'){s='Post this yourself, then tap Done';cls='w';act=`<button type="button" class="linkbtn" data-mdone="${k}">Done</button>`}
+    else if(x.st==='working'||x.st==='queued'){s=x.msg||'Waiting to start';cls=''}
+    else s=m==='manual'?'By hand, after approval':'After approval';
+    return `<div class="prow">${pbx(k)}<span class="t"><b>${PB[k][2]}</b><span class="${cls}">${esc(s)}</span>${x.st==='manual'?`<span class="mrow"><button type="button" class="abtn a-ghost sm" data-mcopy="${k}">Copy caption</button>${p.file.url?`<a class="abtn a-ghost sm" href="${esc(p.file.url)}" target="_blank" rel="noopener">Get video</a>`:''}</span>`:''}</span>${act}</div>`};
+  const capPrev=on.map(k=>`<div class="cprev">${pbx(k)}<div>${k==='yt'?`<b>${esc(p.plats.yt.title||p.title)}</b><br>`:''}${esc(p.plats[k].cap||'—').replace(/\n/g,'<br>')}</div></div>`).join('');
+  return `<div class="pback"><button type="button" class="linkbtn" id="pBack">← Publish</button>${pstPill(p.status)}</div>
+  <section class="pubhero dn"><div class="dn-row">${ic}<div><h2>${esc(big)}</h2><p>${esc(p.title)}${sub?' · '+esc(sub):''}</p></div></div></section>
+  <div class="list" style="margin-top:14px">${on.map(line).join('')}</div>
+  <p class="err" id="pErr" role="alert"></p>
+  <div class="pacts">
+    ${own&&['failed','partly'].includes(p.status)?`<button type="button" class="abtn a-good big" id="pRetry">Try failed ones again</button>`:''}
+    ${['posting','approved','scheduled'].includes(p.status)?`<button type="button" class="abtn a-ghost big" id="pRefresh">Refresh status</button>`:''}
+    ${own&&['approved','scheduled'].includes(p.status)&&!on.some(k=>r[k]&&(r[k].st==='ok'||r[k].st==='working'))?`<button type="button" class="abtn a-ghost big" id="pSendBack">Stop &amp; send back</button>`:''}
+    ${(own||p.byId===PUB().me)&&['posted','manual','failed','partly'].includes(p.status)?`<button type="button" class="abtn a-ghost big danger" id="pDel">Remove from list</button>`:''}
+  </div>
+  <details class="panel pdet"><summary>Captions</summary>${capPrev}</details>
+  <details class="panel pdet"><summary>History</summary><ul class="alog">${(p.history||[]).slice().reverse().map(h=>`<li><span class="sub">${esc(when(h.t))}</span> · <b>${esc(h.who)}</b><br>${esc(h.what)}</li>`).join('')}</ul></details>`;
+}
+function pubCall(op,btn,after){
+  const err=$('#pErr')||document.querySelector(`[data-perr="${op.id}"]`);if(err)err.textContent='';
+  if(btn){btn.disabled=true;btn.dataset.t=btn.textContent;btn.textContent='Please wait…'}
+  return sendPub(op).then(r=>{
+    if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=btn.dataset.t}
+    if(!r||!r.ok){const e=$('#pErr')||document.querySelector(`[data-perr="${op.id}"]`);if(e)e.textContent=(r&&r.message)||'Something went wrong. Check your internet.';return null}
+    if(r.pub)DATA.pub=r.pub;if(after)after(r);return r});
+}
+function pubAskNote(cb){
+  const dlg=$('#actDlg');
+  dlg.innerHTML=`<form method="dialog" class="dlg" id="nbForm"><h2>Send back</h2><p class="sub">Tell them what to change. They see this note on the post.</p>
+    <label class="fld">Note<textarea id="nbNote" rows="4" maxlength="500" placeholder="e.g. Change the hook, add the free class link"></textarea></label>
+    <div class="dlg-acts"><button type="button" class="abtn a-ghost" id="nbCancel">Cancel</button><button type="submit" class="abtn a-good">Send back</button></div></form>`;
+  $('#nbCancel').onclick=()=>dlg.close();
+  $('#nbForm').onsubmit=e=>{e.preventDefault();const n=$('#nbNote').value.trim();dlg.close();cb(n)};
+  dlg.showModal();
+}
+function afterPublish(){
+  const v=$('#view');
+  const back=$('#pBack');if(back)back.onclick=()=>{PV={mode:'list'};render();window.scrollTo(0,0)};
+  v.querySelectorAll('[data-pid]').forEach(b=>b.addEventListener('click',()=>{pubOpen(b.dataset.pid);render();window.scrollTo(0,0)}));
+  v.querySelectorAll('[data-pnew]').forEach(b=>b.addEventListener('click',()=>{pubNew(b.dataset.pnew);render();window.scrollTo(0,0)}));
+  v.querySelectorAll('[data-pok]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Tap again to approve'))return;pubCall({op:'approve',id:b.dataset.pok},b,()=>render())}));
+  v.querySelectorAll('[data-pback]').forEach(b=>b.addEventListener('click',()=>pubAskNote(n=>pubCall({op:'sendback',id:b.dataset.pback,note:n},b,()=>render()))));
+  if(PV.mode==='edit') afterPubEdit();
+  if(PV.mode==='view'){
+    const p=(PUB().posts||[]).find(x=>x.id===PV.id);if(!p)return;
+    v.querySelectorAll('[data-mcopy]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.mcopy;copyText((k==='yt'?(p.plats.yt.title||p.title)+'\n\n':'')+(p.plats[k].cap||'')).then(ok=>{b.textContent=ok?'✓ Copied':'Copy failed'})}));
+    v.querySelectorAll('[data-mdone]').forEach(b=>b.addEventListener('click',()=>{if(!confirmInline(b,'Posted? Tap again'))return;pubCall({op:'manualDone',id:p.id,plat:b.dataset.mdone},b,()=>render())}));
+    const rt=$('#pRetry');if(rt)rt.onclick=()=>pubCall({op:'retry',id:p.id},rt,()=>render());
+    const rf=$('#pRefresh');if(rf)rf.onclick=()=>pubCall({op:'list'},rf,()=>render());
+    const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:p.id,note:n},sb,()=>render()));
+    const dl=$('#pDel');if(dl)dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:p.id},dl,()=>{PV={mode:'list'};render()})};
+  }
+}
+function afterPubEdit(){
+  const d=PV.d,v=$('#view');
+  const t=$('#pTitle');t.addEventListener('input',()=>{d.title=t.value});
+  const sc=$('#pScript');sc.addEventListener('change',()=>{d.scriptId=sc.value;const x=(DATA.scripts||[]).find(s=>s.id===sc.value);if(x&&/^yes/i.test(String(x.ai_label)))d.ai=true;render()});
+  const ai=$('#pAi');ai.addEventListener('change',()=>{d.ai=ai.checked});
+  v.querySelectorAll('[data-seg]').forEach(b=>b.addEventListener('click',()=>{d.plats[b.dataset.seg].mode=b.dataset.m;render()}));
+  v.querySelectorAll('[data-cap]').forEach(el=>el.addEventListener('input',()=>{d.plats[el.dataset.cap][el.dataset.f]=el.value;const c=v.querySelector(`[data-cnt="${el.dataset.cap}${el.dataset.f}"]`);if(c)c.textContent=el.value.length+' / '+el.maxLength}));
+  v.querySelectorAll('[data-same]').forEach(b=>b.addEventListener('click',()=>{d.plats[b.dataset.same].cap=d.plats.ig.cap;render()}));
+  v.querySelectorAll('[data-when]').forEach(b=>b.addEventListener('click',()=>{d.when=b.dataset.when==='now'?'':b.dataset.when;render()}));
+  const pw=$('#pWhen');pw.addEventListener('change',()=>{if(!pw.value)return;const x=new Date(pw.value);if(isNaN(x)||x<new Date()){$('#pErr').textContent='Pick a time in the future.';return}d.when=x.toISOString();render()});
+  const us=$('#pUseScript');if(us)us.onclick=()=>{const x=(DATA.scripts||[]).find(s=>s.id===d.scriptId);if(!x)return;
+    ['ig','fb'].forEach(k=>{if(!d.plats[k].cap)d.plats[k].cap=x.caption||''});if(!d.plats.yt.title)d.plats.yt.title=String(x.title||'').slice(0,90)+' #Shorts';if(!d.plats.yt.cap)d.plats.yt.cap=x.caption||'';render();
+    const m=$('#pAiMsg');if(m)m.textContent='Script caption added to empty boxes. LinkedIn needs English: write it or use Auto-write.'};
+  const ag=$('#pAiGo');if(ag)ag.onclick=()=>{const has=PKEYS.some(k=>d.plats[k].mode!=='off'&&d.plats[k].cap);if(has&&!confirmInline(ag,'Replaces captions. Tap again'))return;
+    pubCall({op:'caption',title:d.title,fileName:d.file.name,scriptId:d.scriptId,ai:d.ai},ag,r=>{const c=r.caps;d.plats.ig.cap=c.ig;d.plats.fb.cap=c.fb;d.plats.li.cap=c.li;d.plats.yt.title=c.yt_title;d.plats.yt.cap=c.yt_desc;
+      if(DATA.pub&&DATA.pub.conn)DATA.pub.conn.aiMonth=r.month;render();const m=$('#pAiMsg');if(m)m.textContent='✓ Written. This cost ₹'+r.cost+'. Check and edit before sending.'})};
+  const payload=()=>({title:d.title,scriptId:d.scriptId,ai:d.ai,when:d.when,plats:d.plats,fileId:d.fileId});
+  const done=r=>{PV={mode:'view',id:r.id};const p=(PUB().posts||[]).find(x=>x.id===r.id);if(p&&['draft','sentback','pending'].includes(p.status))PV={mode:'list'};render();window.scrollTo(0,0)};
+  const check=()=>{const on=PKEYS.filter(k=>d.plats[k].mode!=='off');if(!on.length)return 'Turn on at least one platform.';
+    const miss=on.filter(k=>d.plats[k].mode==='auto'&&!(k==='yt'?d.plats.yt.title:d.plats[k].cap));if(miss.length)return 'Add a '+(miss[0]==='yt'?'YouTube title':PB[miss[0]][2]+' caption')+' first.';
+    if(d.when&&new Date(d.when)<new Date())return 'The time you picked has passed. Pick again.';return ''};
+  $('#pGo').onclick=()=>{const e=check();if(e){$('#pErr').textContent=e;return}const b=$('#pGo');if(CAN('approve')&&!confirmInline(b,'Tap again to approve'))return;
+    pubCall({op:CAN('approve')?'approve':'submit',id:PV.id,post:payload()},b,done)};
+  $('#pSave').onclick=()=>pubCall({op:'save',id:PV.id,post:payload()},$('#pSave'),r=>{PV={mode:'list'};render();window.scrollTo(0,0)});
+  const sb=$('#pSendBack');if(sb)sb.onclick=()=>pubAskNote(n=>pubCall({op:'sendback',id:PV.id,note:n},sb,()=>{PV={mode:'list'};render()}));
+  const dl=$('#pDel');if(dl)dl.onclick=()=>{if(!confirmInline(dl,'Tap again to remove'))return;pubCall({op:'delete',id:PV.id},dl,()=>{PV={mode:'list'};render()})};
+}
 function websiteView(){
   if(!WEB_ON) return `<section class="panel"><h2>Website analytics</h2><p class="sub">Visitors, pages and where they come from (Google Analytics)</p>
     <p style="margin:0 0 8px">Not connected yet. When you have a minute:</p>
@@ -1003,30 +1380,46 @@ function websiteView(){
   const L=DATA.lastSync, n=dates.length;
   const when=L&&L.time?new Date(L.time).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}):null;
   $('#conns').innerHTML=[['--fb','Facebook Page'],['--ig','Instagram'],['--ads','Ad account']].concat(YCH.map(c=>[c.colorName,c.title])).map(x=>`<span class="conn"><span class="dot" style="background:var(${x[0]})"></span>${x[1]}</span>`).join('');
-  $('#syncNote').innerHTML = n
-    ? `<span class="live-dot" aria-hidden="true"></span><span><b>Live</b> · synced ${when?esc(when):dates.length+' days'}</span>`
+  const who=`<span class="who">${esc(ME.name)} · ${esc(ME.roleName)}</span>`;
+  $('#syncNote').innerHTML = (n||!CAN('analytics'))
+    ? `<span class="live-dot" aria-hidden="true"></span><span><b>Live</b> · synced ${when?esc(when):dates.length+' days'}</span>${who}`
     : `<span aria-hidden="true">◆</span><span><b>No data yet.</b> Open the Google Sheet and run <b>Digital Poonam → 2. Load last 90 days</b>, then reload this page.</span>`;
 })();
-const views={home:[home,afterHome],channels:[channelsView,()=>{}],website:[websiteView,()=>{}],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
+const views={home:[home,afterHome],team:[teamView,afterTeam],publish:[publishView,afterPublish],channels:[channelsView,()=>{}],website:[websiteView,()=>{}],instagram:[()=>platform('ig'),()=>afterPlatform('ig')],facebook:[()=>platform('fb'),()=>afterPlatform('fb')],
   ads:[ads,afterAds],youtube:[youtube,afterYoutube],scripts:[scriptsView,afterScripts],competition:[competition,afterCompetition],posts:[postsView,bindSort],audience:[audience,afterAudience]};
-if(!views[state.tab]) state.tab='home';
+if(!views[state.tab]||!allowed(state.tab)) state.tab='home';
+document.querySelectorAll('.tab,#bnav button').forEach(b=>{if(!allowed(b.dataset.tab))b.hidden=true});
+if(CAN('team')){const t=document.createElement('button');t.className='tab';t.setAttribute('role','tab');t.dataset.tab='team';t.id='t-team';t.textContent='Team';$('#tabs').appendChild(t);}
 function render(){
+  const keepY=window.scrollY;
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===state.tab));
+  document.body.setAttribute('data-screen',state.tab);
   document.querySelectorAll('#range button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.d===state.range));
   const c=slice(state.range);
   $('#rangeLabel').textContent=dlabel(c[0].d)+' – '+dlabel(c[c.length-1].d)+' '+c[c.length-1].d.getFullYear();
   const [html,after]=views[state.tab];
-  const pk={instagram:'ig',facebook:'fb',ads:'ads',youtube:'yt',website:'web'}[state.tab];
-  try{ $('#view').innerHTML=(pk&&platData(pk)?`<div class="chero">${heroCard(pk)}</div>`:'')+html(); after(); }
+  const pk={ads:'ads',youtube:'yt',website:'web'}[state.tab];
+  try{ $('#view').innerHTML=(pk&&platData(pk)?`<div class="chero">${heroCard(pk)}</div>`:'')+html(); after();
+    document.querySelectorAll('.chero .bc-b').forEach(b=>b.addEventListener('click',()=>{state.hsel=+b.dataset.i;render()})); }
   catch(err){ $('#view').innerHTML=`<section class="panel">${empty('Could not show this screen: '+esc(err.message))}</section>`; }
   document.querySelectorAll('#bnav button').forEach(x=>x.setAttribute('aria-current',x.dataset.tab===state.tab?'page':'false'));
-  const plat={instagram:'Instagram',facebook:'Facebook',ads:'Meta Ads',youtube:'YouTube',website:'Website',posts:'All posts',audience:'Audience'}[state.tab];
+  const plat={team:'Team',instagram:'Instagram',facebook:'Facebook',ads:'Meta Ads',youtube:'YouTube',website:'Website',posts:'All posts',audience:'Audience'}[state.tab];
   $('#backRow').hidden=!plat; $('#backTitle').textContent=plat||'';
+  window.scrollTo(0,keepY);
 }
-const goTab=t=>{if(!views[t])return;state.tab=t;save();render();window.scrollTo({top:0,behavior:'smooth'})};
+const goTab=t=>{if(!views[t]||!allowed(t))return;state.tab=t;save();render();window.scrollTo({top:0,behavior:'smooth'})};
+/* light / dark switch: remembers your choice, otherwise follows the phone */
+const SUN='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>';
+const MOON='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"></path></svg>';
+const curTheme=()=>document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light';
+function paintThemeBtn(){const b=$('#themeBtn');if(!b)return;const d=curTheme()==='dark';b.innerHTML=(d?SUN:MOON)+'<span class="tl">'+(d?'Light':'Dark')+'</span>';b.setAttribute('aria-label',d?'Switch to light mode':'Switch to dark mode');
+  const m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',d?'#0B0B0C':'#FAF8F5');}
+$('#themeBtn').addEventListener('click',()=>{const n=curTheme()==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('dp-theme',n)}catch(e){}paintThemeBtn();render()});
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{let saved=null;try{saved=localStorage.getItem('dp-theme')}catch(x){}if(saved)return;document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');paintThemeBtn();render()})}catch(e){}
+paintThemeBtn();
 document.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b||b.classList.contains('tab'))return;e.preventDefault();goTab(b.dataset.tab)});
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;state.tab=b.dataset.tab;save();render()});
-$('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.range=+b.dataset.d;save();render()});
+$('#range').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;state.range=+b.dataset.d;state.hsel=null;state.hsel2=null;save();render()});
 let rt,lastW=innerWidth;addEventListener('resize',()=>{if(Math.abs(innerWidth-lastW)<2)return;lastW=innerWidth;clearTimeout(rt);rt=setTimeout(render,150)}); // only redraw when the width really changes
 render();
 })();
